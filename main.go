@@ -1,18 +1,19 @@
 package main
 import (
-    "bytes"
-    "errors"
-    _ "eznagios/math"
     . "fmt"
     "io/ioutil"
     "os"
     "path/filepath"
     "regexp"
     "strings"
+    "errors"
+    "bytes"
 )
-attrVal := _.NewSet()
+
+//type attrVal []string
+type attrVal set
 type rawDef [][]string
-type def map[string]*Set
+type def map[string]*set
 type defs []def
 type obj struct {
     hostDefs                defs
@@ -180,23 +181,23 @@ func newObjectOffset() *objectOffset {
 }
 
 // objectOffset getters and setters
-func (o *objectOffset) offset() offset {
+func (o *objectOffset) Offset() offset {
     return o.index
 }
-func (o *objectOffset) offsetExcl() offset {
+func (o *objectOffset) OffsetExcl() offset {
     return o.indexExcl
 }
 
-func (o *objectOffset) setOffset(i int,s string) {
+func (o *objectOffset) SetOffset(i int,s string) {
     o.index[i] = s
 }
 
-func (o *objectOffset) setOffsetExcl(offsetExcl offset) {
+func (o *objectOffset) SetOffsetExcl(offsetExcl offset) {
     o.indexExcl = offsetExcl
 }
 
 // check if index (type int) already exist
-func (o offset) offsetExist(i int) bool {
+func (o offset) OffsetExist(i int) bool {
     if _, exist := o[i]; exist {
         return true
     }
@@ -210,13 +211,13 @@ func findHostGroups(d *defs, hostname string) objectOffset {
     hostnameExcluded := Sprintf("!%v",hostname)
     for idx,def := range *d {
         if def.attrExist("members"){
-            if def["members"].Has(hostname) && !hgrpOffset.offset().offsetExist(idx) {
+            if def["members"].Has(hostname) && !hgrpOffset.Offset().OffsetExist(idx) {
                 hostgroupName := def["hostgroup_name"].joinAttrVal()
-                hgrpOffset.setOffset(idx, hostgroupName)
-                findHostGroupMembership(d, hostgroupName, hgrpOffset.offset(), hgrpOffset.offsetExcl())
-            } else if def["members"].Has(hostnameExcluded) && !hgrpOffset.offset().offsetExist(idx) {
+                hgrpOffset.SetOffset(idx, hostgroupName)
+                findHostGroupMembership(d, hostgroupName, hgrpOffset.Offset(), hgrpOffset.OffsetExcl())
+            } else if def["members"].Has(hostnameExcluded) && !hgrpOffset.Offset().OffsetExist(idx) {
                 hostgroupName := def["hostgroup_name"].joinAttrVal()
-                hgrpOffset.setOffset(idx, hostgroupName)
+                hgrpOffset.SetOffset(idx, hostgroupName)
             }
         }
     }
@@ -227,11 +228,11 @@ func findHostGroupMembership(d *defs, hostgroupName string, hostgroupOffset,host
     hostgroupNameExcluded := Sprintf("!%v",hostgroupName)
     for idx, def := range *d {
         if def.attrExist("hostgroup_members"){
-            if def["hostgroup_members"].Has(hostgroupName) && !hostgroupOffset.offsetExist(idx){
+            if def["hostgroup_members"].Has(hostgroupName) && !hostgroupOffset.OffsetExist(idx){
                 hostgroupName2 := def["hostgroup_name"].joinAttrVal()
                 hostgroupOffset[idx] = hostgroupName2
                 findHostGroupMembership(d, hostgroupName2, hostgroupOffset, hostgroupOffsetExcluded)
-            } else if def["hostgroup_members"].Has(hostgroupNameExcluded) && !hostgroupOffset.offsetExist(idx){
+            } else if def["hostgroup_members"].Has(hostgroupNameExcluded) && !hostgroupOffset.OffsetExist(idx){
                 hostgroupName2 := def["hostgroup_name"].joinAttrVal()
                 hostgroupOffsetExcluded[idx] = hostgroupName2
             }
