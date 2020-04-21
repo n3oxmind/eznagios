@@ -134,3 +134,54 @@ func (a *set) printAttr() {
     fmt.Println()
 
 }
+// get max length of items in slice
+func MaxLen(a *[]string) int {
+    maxLen := 10
+    for _, v := range *a {
+        if len(v) > maxLen {
+            maxLen = len(v)
+        }
+    }
+    return maxLen
+}
+
+func FillEmpty(s *[]string, hg *[]string, h *string) ([]string,[]string,[]string) {
+    maxSize := len(*s)
+    if len(*hg) > maxSize {
+        maxSize = len(*hg)
+    }
+    sort.Strings(*s)
+    sort.Strings(*hg)
+    svc  := make([]string, maxSize)     // new svc
+    copy(svc,*s)
+    hgrp := make([]string, maxSize)    // new hgrp
+    copy(hgrp,*hg)
+    host := make([]string, maxSize)    // new host
+    host[0] = *h
+
+    return host,svc,hgrp
+
+}
+
+// Print host info (services and hostgroup association)
+func printHostInfo(hostname string, hostgroups hostgroupOffset, services serviceOffset) {
+    svc := services.GetEnabledServiceName()
+    hgrp := hostgroups.GetEnabledHostgroupName()
+    hostLen := len(hostname)
+    svcMaxLen := MaxLen(&svc)
+    hgrpMaxLen := MaxLen(&hgrp)
+    // max index will be use for looping
+    h, s, hg := FillEmpty(&svc,&hgrp,&hostname)
+
+    line := strings.Repeat("-",hostLen+svcMaxLen+hgrpMaxLen+8)
+    //header
+    fmt.Println(line)
+    tableHeader := fmt.Sprintf("| %-*v | %-*v| %-*v|\n%v",hostLen,"Hostname", svcMaxLen,"Service", hgrpMaxLen, "Hostgroup",line)
+    fmt.Println(tableHeader)
+    //rows
+    for i,v := range h {
+        row := fmt.Sprintf("| %-*v | %-*v| %-*v|",hostLen,v, svcMaxLen,s[i], hgrpMaxLen, hg[i])
+        fmt.Println(row)
+    }
+    fmt.Println(line)
+}

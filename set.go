@@ -1,5 +1,9 @@
 package main
 
+import (
+//    "fmt"
+    "regexp"
+)
 // interface as set
 var exists = struct{}{} // take 0 byte
 
@@ -33,6 +37,26 @@ func (s *set) Has(items ...interface{}) bool{
     has := true
     for _, item := range items {
         if _,has = s.m[item]; !has{
+            break
+        }
+    }
+    return has
+}
+// Check if item exist using regex
+func (s *set) RegexHas(item string) bool{
+    for val := range s.m {
+        if has, _ := regexp.MatchString(val.(string)+"$", item); has {
+            return true
+        }
+    }
+    return false
+}
+
+// Check if *set contain any of []string items
+func (s *set) HasAny(items []string) bool{
+    has := false
+    for _,item := range items {
+        if _, has = s.m[item]; has {
             break
         }
     }
@@ -97,3 +121,11 @@ func Intersect(sets ...*set) *set {
     return all
 }
 
+// set to slice of strings conversion
+func (s *set) StringSlice() []string {
+    slc := make([]string,0,s.Size())
+    for item := range s.m {
+        slc = append(slc, item.(string))
+    }
+    return slc
+}
