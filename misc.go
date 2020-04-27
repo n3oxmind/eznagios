@@ -16,6 +16,14 @@ func (o offset) OffsetExist(i int) bool {
     return false
 }
 
+// Check if offset (type int) already exist
+func (o offset) tmplExist(i int) bool {
+    if _, exist := o[i]; exist {
+        return true
+    }
+    return false
+}
+
 // Check if map is empty
 func (o *offset) isEmpty() bool {
     if len(*o) == 0 {
@@ -68,7 +76,9 @@ func RemoveByVal(s []string, v string) {
 func (o *offset) ToSlice() (idx []int, val []string) {
     for k, v := range *o {
         idx = append(idx, k)
-        val = append(val, v)
+        for _, item := range v {
+            val = append(val, item)
+        }
     }
     return idx, val
 }

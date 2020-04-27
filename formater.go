@@ -34,7 +34,7 @@ func formatAttr(od def) string {
 
 // Sort attribute values of type *set
 func (a *set) SortAttrVal() []string{
-    attrVals := make([]string, 0, a.Size())
+    attrVals := make([]string, 0, len(a.m))
     for attrVal := range a.m {
         attrVals = append(attrVals, attrVal.(string))
 

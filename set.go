@@ -45,7 +45,7 @@ func (s *set) Has(items ...interface{}) bool{
 // Check if item exist using regex
 func (s *set) RegexHas(item string) bool{
     for val := range s.m {
-        if has, _ := regexp.MatchString(val.(string)+"$", item); has {
+        if has, _ := regexp.MatchString(val.(string), item); has {
             return true
         }
     }

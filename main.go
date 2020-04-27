@@ -172,38 +172,19 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
             }
         }
     }
-    // search host template for hostgroups
-    if hOffset.templateHostgroups != nil {
-        for _, tempName := range hOffset.templateHostgroups {
-            findTemplateHostGroups(td, hg,tempName, *hgrpOffset)
-        }
+    // hostgroups from host obj definition(include host template)
+    for _, hgrp := range hOffset.GetEnabledHostgroupsName(){
+        findHostGroupMembership(hg, hgrp, *hgrpOffset)
     }
-    // save hostgroup name and location
+    // set enabled hostgroups
     (*hgrpOffset).SetEnabledHostgroup()
     (*hgrpOffset).SetDisabledHostgroup()
+    // add hostgroups extracted from host obj definition to hostgroup list in the hostgroupOffset
+    hOffset.SetEnabledHostgroups(hgrpOffset)
 
     return *hgrpOffset
 }
 
-// recursive lookup for hostgroup delcared in the template definition (support inheritance)
-func findTemplateHostGroups(t *defs, hg *defs, tempName string, hgrpOffset hostgroupOffset)  {
-    for idx, def := range *t {
-        if def["name"].Has(tempName) {
-            if def.attrExist("hostgroups") {
-                hgrpName := def["hostgroups"].joinAttrVal()
-                hgrpOffset.SetTemplateHostgroupsOffset(idx,hgrpName)
-                findHostGroupMembership(hg, hgrpName, hgrpOffset)
-            }
-            // nested template, 'use' can have multiple vals
-            if def.attrExist("use") {
-                for item,_ := range def["use"].m {
-                    findTemplateHostGroups(t, hg,item.(string), hgrpOffset)
-                }
-            }
-        break
-        }
-    }
-}
 
 // Perform recursive lookup for hostgroup membership (where a hostgroup could be a member of another hostgroup)
 func findHostGroupMembership(d *defs, hgName string, hgrpOffset hostgroupOffset) {
@@ -239,67 +220,135 @@ func findServices(d *defs, t *defs, hostgroups hostgroupOffset, hostname string)
     svcOffset := newServiceOffset()
     hostnameExcl := "!"+hostname
     hgEnabled := hostgroups.GetEnabledHostgroupName()
-    hgNameExcl := AddEP(hgEnabled)
-    // this could be enhanced by create separate function to perform search instead of append
-    // since the service file size if not that big this wont make difference in performance
-    serviceDefinitions := append(*d, *t...)
-    for idx, def := range serviceDefinitions {
-        // check if hostname exist in host_name attr
-        if def.attrExist("host_name") {
+    hgExcluded := AddEP(hgEnabled)
+    // search template inheritance (recursively) for association
+    findServiceTemplate(t, svcOffset,hostname, &hgEnabled, &hgExcluded)
+    tmplEnabled := svcOffset.GetEnabledTemplateName()
+    for idx, def := range *d {
+        // check if service definition contain host_name attribute
+        if  def.attrExist("host_name"){
             if def["host_name"].RegexHas(hostname) {
                 svcOffset.SetHostNameOffset(idx, def["service_description"].joinAttrVal())
-            } else if def["host_name"].Has(hostnameExcl) && !svcOffset.GetHostNameExclOffset().OffsetExist(idx){
+            }
+            if def["host_name"].Has(hostnameExcl){
                 svcOffset.SetHostNameExclOffset(idx, def["service_description"].joinAttrVal())
             }
         }
-        // check if any enabled/excluded hostgroup exist in hostgroup_name attr
-        if def.attrExist("hostgroup_name") {
+        // check if service definition contains hostgroup_name attribute
+        if def.attrExist("hostgroup_name"){
             if def["hostgroup_name"].HasAny(hgEnabled) {
                 svcOffset.SetHostgroupNameOffset(idx,def["service_description"].joinAttrVal())
-            }else if def["hostgroup_name"].HasAny(hgNameExcl){
+            }
+            if def["hostgroup_name"].HasAny(hgExcluded){
                 svcOffset.SetHostgroupNameExclOffset(idx, def["service_description"].joinAttrVal())
             }
         }
-        // service definition attributes take precedence over service template attributes
-        // check if service template contain hostgroups 
-        if def.attrExist("use") && (!def.attrExist("hostgroup_name") || !def.attrExist("host_name"))  {
-            findServiceTemplateHostgroupName(svcOffset, t, def["use"].StringSlice(), def, hostname, hgEnabled)
+        // service definition that does not have hostname/hostgroup_name attr just 'use'
+        if def.attrExist("use"){
+            if def["use"].HasAny(tmplEnabled){
+                svcOffset.SetUseOffset(idx, def["service_description"].joinAttrVal())
+            }
         }
     }
     // Filter enabled and excluded/disabled services
     (*svcOffset).SetEnabledService()
     (*svcOffset).SetDisabledService()
-    fmt.Println(svcOffset.GetTemplateHostgroupNameOffset())
-    fmt.Println(svcOffset.GetTemplateHostNameOffset())
     return *svcOffset
 }
 
-// recursive search the service template for possible hostgroup_name
-func findServiceTemplateHostgroupName(svcOffset *serviceOffset, svcTempDefs *defs, tempNames []string, svcDef def, hostname string, hgNames []string) {
-    for _, tempName := range tempNames {
-        for i, def := range *svcTempDefs {
-            if def.attrExist("name"){
-                if def["name"].Has(tempName){// template enabled disabled __< here left
-                    if def.attrExist("hostgroup_name") && def["hostgroup_name"].HasAny(hgNames){
-                        svcOffset.SetTemplateHostgroupNameOffset(i, def["hostgroup_name"].joinAttrVal())
-                    }
-                    if def.attrExist("host_name") && def["host_name"].RegexHas(hostname) {
-                        svcOffset.SetTemplateHostNameOffset(i, def["host_name"].joinAttrVal())
-                    }
-                    if def.attrExist("use") {
-                        findServiceTemplateHostgroupName(svcOffset, svcTempDefs, def["use"].StringSlice(), def, hostname, hgNames)
-                    }
-                    // break if template does not have nested use attribute
-                    break
+// find service template association
+func findServiceTemplate(t *defs, svcOffset *serviceOffset, hostname string,  hgEnabled *[]string , hgExcluded *[]string) {
+    hasAssociation := false
+    for idx, def := range *t {
+        if def.attrExist("host_name") {
+            if def["host_name"].RegexHas(hostname){
+                if def.attrExist("service_description"){
+                    svcOffset.SetHostNameOffset(idx, def["service_description"].joinAttrVal())
+                }else {
+                    svcOffset.SetTemplateHostNameOffset(idx,def["name"].joinAttrVal())
+                }
+                hasAssociation = true
+            }
+            if def["host_name"].RegexHas("!"+hostname){
+                if def.attrExist("service_description"){
+                    svcOffset.SetHostNameExclOffset(idx, def["service_description"].joinAttrVal())
+                }else{
+                    svcOffset.SetTemplateHostNameExclOffset(idx,def["name"].joinAttrVal())
                 }
             }
+        }
+        if def.attrExist("hostgroup_name"){
+            if def["hostgroup_name"].HasAny(*hgEnabled){
+                if def.attrExist("service_description"){
+                    svcOffset.SetHostgroupNameOffset(idx, def["service_description"].joinAttrVal())
+                }else{
+                    svcOffset.SetTemplateHostgroupNameOffset(idx,def["name"].joinAttrVal())
+                }
+                hasAssociation = true
+            }
+            if def["hostgroup_name"].HasAny(*hgExcluded){
+                if def.attrExist("service_description"){
+                    svcOffset.SetHostgroupNameExclOffset(idx, def["service_description"].joinAttrVal())
+                }else{
+                    svcOffset.SetTemplateHostgroupNameExclOffset(idx,def["name"].joinAttrVal())
+                }
+            }
+        }
+        if hasAssociation && def.attrExist("use") {
+            GetInheritanceDepth(t , svcOffset , def["use"].joinAttrVal(), hostname , hgEnabled, hgExcluded,idx, def["name"].joinAttrVal())
+        }
+    }
+// remove duplicate and return enabled template only
+svcOffset.SetEnabledTemplate()
+}
+
+func GetInheritanceDepth(t *defs, svcOffset *serviceOffset, tmplName string, hostname string,  hgEnabled *[]string , hgExcluded *[]string, idx int, name string) {
+    // speed up lookup for the same inheritance chain
+    for _, def := range *t {
+        if tmplName == def["name"].joinAttrVal() {
+            if def.attrExist("host_name") {
+                if def["host_name"].RegexHas(hostname){
+                    if def.attrExist("service_description"){
+                        svcOffset.SetHostNameOffset(idx, def["service_description"].joinAttrVal())
+                    }else {
+                        svcOffset.SetTemplateHostNameOffset(idx,def["name"].joinAttrVal())
+                    }
+                }
+                if def["host_name"].RegexHas("!"+hostname){
+                    if def.attrExist("service_description"){
+                        svcOffset.SetHostNameExclOffset(idx, def["service_description"].joinAttrVal())
+                    }else{
+                        svcOffset.SetTemplateHostNameExclOffset(idx,def["name"].joinAttrVal())
+                    }
+                }
+            }
+            if def.attrExist("hostgroup_name"){
+                if def["hostgroup_name"].HasAny(*hgEnabled){
+                    if def.attrExist("service_description"){
+                        svcOffset.SetHostgroupNameOffset(idx, def["service_description"].joinAttrVal())
+                    }else{
+                        svcOffset.SetTemplateHostgroupNameOffset(idx,def["name"].joinAttrVal())
+                    }
+                }
+                if def["hostgroup_name"].HasAny(*hgExcluded){
+                    if def.attrExist("service_description"){
+                        svcOffset.SetHostgroupNameExclOffset(idx, def["service_description"].joinAttrVal())
+                    }else{
+                        svcOffset.SetTemplateHostgroupNameExclOffset(idx,def["name"].joinAttrVal())
+                    }
+                }
+            }
+            if def.attrExist("use") {
+                GetInheritanceDepth(t , svcOffset , def["use"].joinAttrVal(), hostname , hgEnabled, hgExcluded, idx, name)
+            }
+        break
         }
     }
 }
 
 
 // Find for hostname
-func findHost(d *defs , hostname string) hostOffset {
+func findHost(d *defs ,t *defs, hostname string) hostOffset {
     hOffset := newHostOffset()
     for idx, def := range *d {
         if def.attrExist("host_name") {
@@ -310,24 +359,46 @@ func findHost(d *defs , hostname string) hostOffset {
                 hOffset.SetHostDefinition(def)
                 // TODO:need to find away to preserve order *set unordered need to use [] instead for 'use' only
                 if def.attrExist("use"){
-                    hOffset.SetTemplateHostgroups(def["use"])
+                    for tmpl := range def["use"].m{
+                        findHostTemplate(t, hOffset, tmpl.(string))
+                    }
                 }
                 if def.attrExist("hostgroups") {
-                    hOffset.SetHostgroups(def["hostgroups"])
+                    hOffset.SetHostgroupsOffset(idx, def["hostgroups"])
                 }
                 break
             }
         }
     }
+    hOffset.SetEnabledHostgroupsName()
     return *hOffset
 }
 
+// recursive lookup for hostgroup delcared in the template definition (support inheritance)
+func findHostTemplate(t *defs, hOffset *hostOffset, tmplName string ){
+    for idx, def := range *t {
+        if def["name"].Has(tmplName) {
+            if def.attrExist("hostgroups") {
+                hOffset.SetTemplateHostgroupsOffset(idx, def["hostgroups"])
+            }
+            if def.attrExist("use"){
+                for tmpl := range def["use"].m{
+                    findHostTemplate(t, hOffset, tmpl.(string))
+                }
+            }
+            break
+        }
+    }
+}
+
 func main() {
-    path := "/home/afathi/nagios-configs"
-//    path := "test/"
+//    path := "/home/afathi/nagios-configs"
+    path := "test/"
 //    hostname := "sdk-jenkins.sea.bigfishgames.com"
-    hostname := "java03-mongo-db05.sea.bigfishgames.com"
-//    hostname := "host3.bigfishgames.com"
+//    hostname := "java03-mongo-db05.sea.bigfishgames.com"
+//    hostname := "sdk-jenkins.sea.bigfishgames.com"
+    hostname := "host3.bigfishgames.com"
+//    hostname := "casino-game210.sea.bigfishgames.com"
     excludedDir := []string {"automated", ".git", "libexec", "timeperiods.cfg", "servicegroups.cfg"}
     configFiles := findConfFiles(path, ".cfg", excludedDir)
     data, err := readConfFile(configFiles)
@@ -339,7 +410,7 @@ func main() {
         os.Exit(1)
     }
     // search for the host
-    host :=  findHost(&objDefs.hostDefs, hostname)
+    host :=  findHost(&objDefs.hostDefs, &objDefs.hostTempDefs, hostname)
     if host.GetHostName() == "" {
         fmt.Println("Warning: host does not exist")
         os.Exit(1)
@@ -352,6 +423,8 @@ func main() {
         services.svcEnabledName = append(services.svcEnabledName, "Not Found")
         fmt.Println(hostgroups)
     }
+
+
     printHostInfo(host.GetHostName(), hostgroups, services)
 //    arr := strSlice{"a", "b", "c", "d"}
 //    fmt.Println(arr)
