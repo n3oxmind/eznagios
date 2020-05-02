@@ -8,9 +8,9 @@ import (
 )
 
 // Convert *set (attr values) into string
-func (s *set) joinAttrVal() string {
-    attrVals := s.SortAttrVal()
-    return strings.Join(attrVals, ",")
+func (s attrVal) joinAttrVal() string {
+    (s).SortAttrVal()
+    return strings.Join(s, ",")
 }
 
 // Format object attribute
@@ -33,14 +33,8 @@ func formatAttr(od def) string {
 }
 
 // Sort attribute values of type *set
-func (a *set) SortAttrVal() []string{
-    attrVals := make([]string, 0, len(a.m))
-    for attrVal := range a.m {
-        attrVals = append(attrVals, attrVal.(string))
-
-    }
-    sort.Strings(attrVals)
-    return attrVals
+func (a *attrVal) SortAttrVal(){
+    sort.Strings(*a)
 }
 // Sort attribute names of type def
 func (d def) sortAttrNames() []string {
@@ -58,7 +52,7 @@ func formatObjDef (od def, maxAttrLen int) string {
     objDefFormat := ""
     attrNames := od.sortAttrNames()                                                         // sort map keys
     for _,attrName := range attrNames { 
-        attrValue := od[attrName].joinAttrVal()                                             //sort and join attr value (*set)
+        attrValue := od[attrName].joinAttrVal()
         objDefFormat += fmt.Sprintf("\t%*v% v\n",-(maxAttrLen+4), attrName,attrValue)         //formated attr
     }
     return objDefFormat
@@ -114,7 +108,7 @@ func (o defs) printObj(ftype string) {
     if ftype != "go" {
         for _,s := range o {
             for k, v := range s {
-                fmt.Printf("%*v\t%v: %v\n",-10, k, v, v.Size())
+                fmt.Printf("%*v\t%v: %v\n",-10, k, v, v.length())
             }
             fmt.Println()
         }
@@ -127,15 +121,15 @@ func (o defs) printObj(ftype string) {
 }
 
 // Print *set (object attribute value)
-func (a *set) printAttr() {
-    for item := range a.m{
+func (a *attrVal) printAttr() {
+    for _,item := range *a{
         fmt.Printf("%v,",item)
     }
     fmt.Println()
 
 }
 // get max length of items in slice
-func MaxLen(a *[]string) int {
+func MaxLen(a *attrVal) int {
     maxLen := 10
     for _, v := range *a {
         if len(v) > maxLen {
@@ -145,7 +139,7 @@ func MaxLen(a *[]string) int {
     return maxLen
 }
 
-func FillEmpty(s *[]string, hg *[]string, h *string) ([]string,[]string,[]string) {
+func FillEmpty(s *attrVal, hg *attrVal, h *string) ([]string,[]string,[]string) {
     maxSize := len(*s)
     if len(*hg) > maxSize {
         maxSize = len(*hg)
@@ -184,4 +178,15 @@ func printHostInfo(hostname string, hostgroups hostgroupOffset, services service
         fmt.Println(row)
     }
     fmt.Println(line)
+}
+
+func (d *defs) printHostDef(idx int) {
+    oAttrs := formatObjDef((*d)[idx], maxHostAttrLen)
+    fmt.Println("define host {\n",oAttrs,"}")
+}
+func (d *defs) printServiceDef(idx int) {
+    fmt.Println((*d)[idx])
+}
+func (d *defs) printHostgroupDef(idx int) {
+    fmt.Println((*d)[idx])
 }

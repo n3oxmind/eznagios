@@ -59,7 +59,7 @@ func readConfFile(filename []string ) (data string, err error) {
     return buffer.String(), nil
 }
 
-// find duplicate attribute name
+// Find duplicate attribute names
 func (d def) FindDuplicateAttrName(attrName *string, rdef rawDef, objType string) {
     if _, exist :=  d[*attrName]; exist {
         dupDef := def{}
@@ -69,41 +69,39 @@ func (d def) FindDuplicateAttrName(attrName *string, rdef rawDef, objType string
     }
 }
 
-// parse object attributes without removing/deleting anything (except empty attrVal)
+// Parse object attributes without modifying the original data (except empty attrVal)
 func (a rawDef) rawParseObjAttr()  def {
     objDef := def{}
     for _,attr := range a {
-        oAttr := NewSet()
+        oAttr := attrVal{}
         oAttrVal := strings.Split(attr[2], ",")
         for _,val := range oAttrVal {
             oAttr.Add(strings.TrimSpace(val))
         }
         oAttr.Remove("")                                    // remove empty attr val silently
-        objDef[attr[1]] = oAttr                             // add attr to the def
+        objDef[attr[1]] = &oAttr                            // add attr to the def
     }
     return objDef
 }
 
-// parse Nagios object attributes
-// param: attr[1] -- attrName
-// param: attr[2] -- attrVal
+// parse Nagios object attributes; attr[1]-> attrName, attr[2]->attrVal
 func parseObjAttr( rawObjDef []string, reAttr *regexp.Regexp, objType string )  def {
     objDef := def{}
     mAttr := reAttr.FindAllStringSubmatch(rawObjDef[2], -1)
     for _,attr := range mAttr {
-        oAttr := NewSet()
+        oAttr := attrVal{}
         oAttrVal := strings.Split(attr[2], ",")
         for _,val := range oAttrVal {
             oAttr.Add(strings.TrimSpace(val))
         }
         oAttr.Remove("")                                            // remove empty attr val silently
         objDef.FindDuplicateAttrName(&attr[1], mAttr, objType)      // check for duplicate attr name
-        objDef[attr[1]] = oAttr                                     // add attr to the def
+        objDef[attr[1]] = &oAttr                                     // add attr to the def
     }
     return objDef
 }
 
-// Get nagios objects definitions
+// Get Nagios objects definitions
 func getObjDefs(data string) (*obj, error) {
     objDefs := obj{}
     reAttr := regexp.MustCompile(`\s*(?P<attr>.*?)\s+(?P<value>.*)\n`)
@@ -174,14 +172,14 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
     }
     // hostgroups from host obj definition(include host template)
     for _, hgrp := range hOffset.GetEnabledHostgroupsName(){
+        hgrp := strings.TrimLeft(hgrp,"+")
         findHostGroupMembership(hg, hgrp, *hgrpOffset)
     }
     // set enabled hostgroups
     (*hgrpOffset).SetEnabledHostgroup()
     (*hgrpOffset).SetDisabledHostgroup()
-    // add hostgroups extracted from host obj definition to hostgroup list in the hostgroupOffset
+    // add hostgroups extracted from host obj definition to hostgroups list in the hostgroupOffset
     hOffset.SetEnabledHostgroups(hgrpOffset)
-
     return *hgrpOffset
 }
 
@@ -189,7 +187,11 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
 // Perform recursive lookup for hostgroup membership (where a hostgroup could be a member of another hostgroup)
 func findHostGroupMembership(d *defs, hgName string, hgrpOffset hostgroupOffset) {
     hostgroupNameExcl := fmt.Sprintf("!%v",hgName)
+    hgrpExist := false
     for idx, def := range *d {
+        if def["hostgroup_name"].joinAttrVal() == hgName {
+            hgrpExist = true
+        }
         if def.attrExist("hostgroup_members"){
             if def["hostgroup_members"].Has(hgName) && !hgrpOffset.GetHostgroupMembersOffset().OffsetExist(idx){
                 hostgroupName := def["hostgroup_name"].joinAttrVal()
@@ -202,6 +204,9 @@ func findHostGroupMembership(d *defs, hgName string, hgrpOffset hostgroupOffset)
                 hgrpOffset.SetHostgroupMembersExclOffset(idx,hostgroupName)
             }
         }
+    }
+    if !hgrpExist {
+        fmt.Println("warning, hostgroup does not exist", hgName)
     }
 }
 
@@ -222,7 +227,7 @@ func findServices(d *defs, t *defs, hostgroups hostgroupOffset, hostname string)
     hgEnabled := hostgroups.GetEnabledHostgroupName()
     hgExcluded := AddEP(hgEnabled)
     // search template inheritance (recursively) for association
-    findServiceTemplate(t, svcOffset,hostname, &hgEnabled, &hgExcluded)
+    findServiceTemplate(t, svcOffset,hostname, &hgEnabled, hgExcluded)
     tmplEnabled := svcOffset.GetEnabledTemplateName()
     for idx, def := range *d {
         // check if service definition contain host_name attribute
@@ -239,7 +244,7 @@ func findServices(d *defs, t *defs, hostgroups hostgroupOffset, hostname string)
             if def["hostgroup_name"].HasAny(hgEnabled) {
                 svcOffset.SetHostgroupNameOffset(idx,def["service_description"].joinAttrVal())
             }
-            if def["hostgroup_name"].HasAny(hgExcluded){
+            if def["hostgroup_name"].HasAny(*hgExcluded){
                 svcOffset.SetHostgroupNameExclOffset(idx, def["service_description"].joinAttrVal())
             }
         }
@@ -257,7 +262,7 @@ func findServices(d *defs, t *defs, hostgroups hostgroupOffset, hostname string)
 }
 
 // find service template association
-func findServiceTemplate(t *defs, svcOffset *serviceOffset, hostname string,  hgEnabled *[]string , hgExcluded *[]string) {
+func findServiceTemplate(t *defs, svcOffset *serviceOffset, hostname string,  hgEnabled *attrVal , hgExcluded *attrVal) {
     hasAssociation := false
     for idx, def := range *t {
         if def.attrExist("host_name") {
@@ -298,11 +303,11 @@ func findServiceTemplate(t *defs, svcOffset *serviceOffset, hostname string,  hg
             GetInheritanceDepth(t , svcOffset , def["use"].joinAttrVal(), hostname , hgEnabled, hgExcluded,idx, def["name"].joinAttrVal())
         }
     }
-// remove duplicate and return enabled template only
-svcOffset.SetEnabledTemplate()
+    // remove duplicate and return enabled template only
+    svcOffset.SetEnabledServiceTemplate()
 }
 
-func GetInheritanceDepth(t *defs, svcOffset *serviceOffset, tmplName string, hostname string,  hgEnabled *[]string , hgExcluded *[]string, idx int, name string) {
+func GetInheritanceDepth(t *defs, svcOffset *serviceOffset, tmplName string, hostname string,  hgEnabled *attrVal , hgExcluded *attrVal, idx int, name string) {
     // speed up lookup for the same inheritance chain
     for _, def := range *t {
         if tmplName == def["name"].joinAttrVal() {
@@ -357,10 +362,9 @@ func findHost(d *defs ,t *defs, hostname string) hostOffset {
                 hOffset.SetHostName(hostname)
                 hOffset.SetHostOffset(idx)
                 hOffset.SetHostDefinition(def)
-                // TODO:need to find away to preserve order *set unordered need to use [] instead for 'use' only
                 if def.attrExist("use"){
-                    for tmpl := range def["use"].m{
-                        findHostTemplate(t, hOffset, tmpl.(string))
+                    for _,tmpl := range *def["use"]{
+                        findHostTemplate(t, hOffset, tmpl)
                     }
                 }
                 if def.attrExist("hostgroups") {
@@ -380,15 +384,36 @@ func findHostTemplate(t *defs, hOffset *hostOffset, tmplName string ){
         if def["name"].Has(tmplName) {
             if def.attrExist("hostgroups") {
                 hOffset.SetTemplateHostgroupsOffset(idx, def["hostgroups"])
+                hOffset.SetTemplateOrder(idx)
             }
             if def.attrExist("use"){
-                for tmpl := range def["use"].m{
-                    findHostTemplate(t, hOffset, tmpl.(string))
+                for _,tmpl := range *def["use"]{
+                    findHostTemplate(t, hOffset, tmpl)
                 }
             }
             break
         }
     }
+}
+
+// delete host obj
+func deleteHost(d *defs, h *hostOffset){
+    if h.host != nil {
+        for idx, def := range *d {
+            if h.host.OffsetExist(idx){
+                fmt.Println(idx, def)
+//                delete(, idx)
+            }
+        }
+    }
+}
+// delete service association
+func deleteService(){
+
+}
+// delete hostgroup association
+func deleteHostgroup(){
+
 }
 
 func main() {
@@ -399,7 +424,9 @@ func main() {
 //    hostname := "sdk-jenkins.sea.bigfishgames.com"
     hostname := "host3.bigfishgames.com"
 //    hostname := "casino-game210.sea.bigfishgames.com"
-    excludedDir := []string {"automated", ".git", "libexec", "timeperiods.cfg", "servicegroups.cfg"}
+//    hostname := "f2p.bigfishgames.com"
+//    hostname := "adash01.bigfish.lan"
+    excludedDir := []string {".git", "libexec", "timeperiods.cfg", "servicegroups.cfg"}
     configFiles := findConfFiles(path, ".cfg", excludedDir)
     data, err := readConfFile(configFiles)
     if err != nil {
@@ -423,6 +450,7 @@ func main() {
         services.svcEnabledName = append(services.svcEnabledName, "Not Found")
         fmt.Println(hostgroups)
     }
+    deleteHost(&objDefs.hostDefs, &host)
 
 
     printHostInfo(host.GetHostName(), hostgroups, services)

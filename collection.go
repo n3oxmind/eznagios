@@ -42,12 +42,12 @@ func CopyMapInt(m offset) *offset {
 }
 
 // Prefix item with '!' for execlution
-func AddEP(s []string) []string {
-    EPSlice := make([]string,len(s))
+func AddEP(s attrVal) *attrVal {
+    EPSlice := make(attrVal,len(s))
     for i,item := range s {
         EPSlice[i] = "!"+item
     } 
-    return EPSlice
+    return &EPSlice
 }
 
 // Remove item from a slice based on index
@@ -73,12 +73,12 @@ func RemoveByVal(s []string, v string) {
 }
 
 // Convert offset to []int -> holds indices and []string -> holds attr value
-func (o *offset) ToSlice() (idx []int, val []string) {
+func (o *offset) ToSlice() (idx []int, val attrVal) {
     for k, v := range *o {
         idx = append(idx, k)
         for _, item := range v {
             val = append(val, item)
         }
     }
-    return idx, val
+    return idx,val
 }
