@@ -19,7 +19,7 @@ func formatAttr(od def) string {
     oDefFormat := ""
     maxAttrLen := 0
     // find max attr name
-    for aName,_ := range od {
+    for aName := range od {
         if len(aName) > maxAttrLen {
            maxAttrLen = len(aName)
         }
@@ -48,21 +48,22 @@ func (d def) sortAttrNames() []string {
 }
 
 // Format Nagios object Definition before printing it
-func formatObjDef (od def, maxAttrLen int) string {
+func formatObjDef (od def, objType string, maxAttrLen int) string {
     objDefFormat := ""
     attrNames := od.sortAttrNames()                                                         // sort map keys
     for _,attrName := range attrNames { 
         attrValue := od[attrName].joinAttrVal()
         objDefFormat += fmt.Sprintf("\t%*v% v\n",-(maxAttrLen+4), attrName,attrValue)         //formated attr
     }
-    return objDefFormat
+    return objType+"{\n"+objDefFormat+"}\n"
 }
 
-// Print a pretty format of object definition
-func (d defs)  printObjDef(h string) {
+// Get maximum attribute of an obj
+func getMaxAttr(s string) (string, int) {
+    // default value for attr length
     maxAttrLength := 30
     objType := ""
-    switch h {
+    switch s {
     case "host":
         maxAttrLength = maxHostAttrLen
         objType       = "define host"
@@ -97,9 +98,15 @@ func (d defs)  printObjDef(h string) {
         //warning
         maxAttrLength = 30
     }
+    return objType, maxAttrLength
+}
+
+// Print a pretty format of object definition
+func (d defs)  printObjDef(h string) {
+    objType, maxAttr := getMaxAttr(h)
     for _,def := range d {
-        oAttrs := formatObjDef(def, maxAttrLength)
-        fmt.Println(objType+"{\n",oAttrs,"}")
+        formatDef := formatObjDef(def, objType, maxAttr)
+        fmt.Printf(formatDef)
     }
 }
 
@@ -159,7 +166,8 @@ func FillEmpty(s *attrVal, hg *attrVal, h *string) ([]string,[]string,[]string) 
 
 // Print host info (services and hostgroup association)
 func printHostInfo(hostname string, hostgroups hostgroupOffset, services serviceOffset) {
-    svc := services.GetEnabledServiceName()
+    svc := append(services.svcEnabledName, services.svcOthers...)
+    fmt.Println(services.svcOthers)
     hgrp := hostgroups.GetEnabledHostgroupName()
     hostLen := len(hostname)
     svcMaxLen := MaxLen(&svc)
@@ -180,13 +188,11 @@ func printHostInfo(hostname string, hostgroups hostgroupOffset, services service
     fmt.Println(line)
 }
 
-func (d *defs) printHostDef(idx int) {
-    oAttrs := formatObjDef((*d)[idx], maxHostAttrLen)
-    fmt.Println("define host {\n",oAttrs,"}")
-}
-func (d *defs) printServiceDef(idx int) {
-    fmt.Println((*d)[idx])
-}
-func (d *defs) printHostgroupDef(idx int) {
-    fmt.Println((*d)[idx])
+// print a specifi object definition
+func (d *defs) printDef(objType string, ids ...string) {
+    otype, alen := getMaxAttr(objType)
+    for _, id := range ids {
+        formatDef := formatObjDef((*d)[id], otype, alen)
+        fmt.Println(formatDef)
+    } 
 }

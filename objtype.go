@@ -9,8 +9,8 @@ import (
 type rawDef [][]string                    // raw data read from .cfg files
 type attrVal []string
 type def map[string]*attrVal              // nagios object definition
-type defs []def                           // nagios object definitons
-type offset map[int][]string              // nagios object attribute offset in defs
+type defs map[string]def                           // nagios object definitons
+type offset map[string][]string              // nagios object attribute offset in defs
 
 // nagios object definition struct
 type obj struct {
@@ -26,6 +26,7 @@ type obj struct {
     serviceTempDefs         defs        // nagios service template object definition
     contactTempDefs         defs        // nagios contact template object definition
 }
+
 // nagios service obj struct
 type serviceOffset struct {
     hostName                    offset      // service that the host is associated with via host_name attr
@@ -40,10 +41,17 @@ type serviceOffset struct {
     svcEnabled                  offset      // active services
     svcDisabled                 offset      // excluded services
     tmplEnabledName             attrVal     // active service template name
-    svcEnabledName              attrVal    // active services names that belong to a specific host
-    svcDisabledName             attrVal    // excluded services names that belong to a specific host
+    tmplDisabledName            attrVal     // disabled service template name
+    svcEnabledName              attrVal     // active service name that belong to a specific host
+    svcDisabledName             attrVal     // excluded service name from host association
+    svcEnabledDisabledName      attrVal     // active and exlcuded service name
+    tmplEnabledDisabledName     attrVal     // active and excluded service template name
+    tmplDeleted                 attrVal     // deleted service template object definition
+    svcDeleted                  attrVal     // deleted service object definition
+    svcOthers                    attrVal     // service definition that has name and service_description attributes ( useful for printHostInfo )
 }
 // nagios hostgroup obj struct
+//TODO: use set instead of offset map[string]{}
 type hostgroupOffset struct {
     members                     offset      // hostgroup that the host member of via members attr
     membersExcl                 offset      // excluded hostgroup that the host not member of via members attr
@@ -54,6 +62,8 @@ type hostgroupOffset struct {
     hgrpDisabled                *attrVal    // excluded hostgroups
     hgrpEnabledName             attrVal     // hostgroups names that associated with a specific host
     hgrpDisabledName            attrVal     // excluded hostgroups names htat associated with a specific host
+    hgrpEnabledDisabledName     attrVal     // active and excluded hgroups
+    hgrpDeleted                 attrVal     // deleted hostgroup object definition
 }
 // nagios host obj struct
 type hostOffset struct {
@@ -63,16 +73,32 @@ type hostOffset struct {
     templateHostgroupsExcl      offset      // hostgroups defined in host templates via 'use' attr
     host                        offset      // host location in hostDefs
     hostDef                     def         // host definition
-    hostIndex                   int         // host index
+    hostIndex                   string      // host index
     hostName                    string      // hostname
     hgrpEnabledName             []string    // 
     hgrpDisabledName            []string    //
-    templateOrder               []int       // host template index order (so inheritance dont get messed up)
+    templateOrder               []string       // host template index order (so inheritance dont get messed up)
+}
+// obj constructor
+func newObj() *obj {
+    o := &obj{}
+    o.hostDefs = make(defs)
+    o.hostTempDefs = make(defs)
+    o.hostgroupDefs = make(defs)
+    o.hostdependencyDefs = make(defs)
+    o.serviceDefs = make(defs)
+    o.serviceTempDefs = make(defs)
+    o.servicedependencyDefs = make(defs)
+    o.commandDefs  = make(defs)
+    o.contactDefs  = make(defs)
+    o.contactTempDefs  = make(defs)
+    o.contactgroupDefs  = make(defs)
+    return o
 }
 // hostOffset constructor
 func newHostOffset() *hostOffset {
 	o := &hostOffset{}
-	o.hostIndex = -1             // -1 indicate host index does not exist
+	o.hostIndex = ""
 	o.hostName = ""              // "" indicate host name does not exist
     o.templateHostgroups =        make(offset)
     o.templateHostgroupsExcl =    make(offset)
@@ -114,47 +140,57 @@ func newHostGroupOffset() *hostgroupOffset {
 }
 
 func (o *obj) SetContactTempDefs(contactTempDef def) {
-    o.contactTempDefs = append(o.contactTempDefs,contactTempDef)
+    ID := contactTempDef["name"].ToString()
+    o.contactDefs[ID] = contactTempDef
 }
 
 func (o *obj) SetHostTempDefs(hostTempDef def) {
-    o.hostTempDefs = append(o.hostTempDefs,hostTempDef)
+    ID := hostTempDef["name"].ToString()
+    o.hostTempDefs[ID] = hostTempDef
 }
 
 func (o *obj) SetServiceTempDefs(serviceTempDef def) {
-    o.serviceTempDefs = append(o.serviceTempDefs,serviceTempDef)
+    ID := serviceTempDef["name"].ToString()
+    o.serviceTempDefs[ID] = serviceTempDef
 }
 
 func (o *obj) SetHostDefs(hostDef def) {
-    o.hostDefs = append(o.hostDefs, hostDef)
+    ID := hostDef["host_name"].ToString()
+    o.hostDefs[ID] = hostDef
 }
 
 func (o *obj) SetHostGroupDefs(hostgroupDef def) {
-    o.hostgroupDefs = append(o.hostgroupDefs, hostgroupDef)
+    ID := hostgroupDef["hostgroup_name"].ToString()
+    o.hostgroupDefs[ID] = hostgroupDef
 }
 
 func (o *obj) SetServiceDefs(serviceDef def) {
-    o.serviceDefs = append(o.serviceDefs, serviceDef)
+    ID := serviceDef["service_description"].ToString()
+    o.serviceDefs[ID] = serviceDef
 }
 
 func (o *obj) SetContactDefs(contactDef def) {
-    o.contactDefs = append(o.contactDefs, contactDef)
+    ID := contactDef["contact_name"].ToString()
+    o.contactDefs[ID] = contactDef
 }
 
-func (o *obj) SetContactGroupDefs(contactgoupDef def) {
-    o.contactgroupDefs = append(o.contactgroupDefs, contactgoupDef)
+func (o *obj) SetContactGroupDefs(contactgroupDef def) {
+    ID := contactgroupDef["contactgroup_name"].ToString()
+    o.contactgroupDefs[ID] = contactgroupDef
 }
 
 func (o *obj) SetcommandDefs(commandDef def) {
-    o.commandDefs = append(o.commandDefs, commandDef)
+    ID := commandDef["command_name"].ToString()
+    o.commandDefs[ID] = commandDef
 }
 
-func (o *obj) SetHostDependencyDefs(hostdependencyDef def) {
-    o.hostdependencyDefs = append(o.hostdependencyDefs, hostdependencyDef)
+func (o *obj) SetHostDependencyDefs(hostdependencyDef def, idx int) {
+    o.hostdependencyDefs[string(idx)] = hostdependencyDef
 }
 
-func (o *obj) SetServiceDependencyDefs(servicedependencyDef def) {
-    o.servicedependencyDefs = append(o.servicedependencyDefs, servicedependencyDef)
+// TODO:obj dependency does not have a unique ID need to hcange the data surct to []defs
+func (o *obj) SetServiceDependencyDefs(servicedependencyDef def, idx int) {
+    o.servicedependencyDefs[string(idx)] = servicedependencyDef
 }
 
 // hostgroupOffset Getters
@@ -193,24 +229,35 @@ func (o *hostgroupOffset) GetTemplateHostgroupsOffset() offset {
     return o.templateHostgroups
 }
 // hostgroupOffset Setters
-func (o *hostgroupOffset) SetMembersOffset(i int, member string) {
-    o.members[i] = append(o.members[i], member)
+func (o *hostgroupOffset) SetMembersOffset(id string, member string) {
+    o.members[id] = append(o.members[id], member)
 }
 
-func (o *hostgroupOffset) SetMembersExclOffset(i int, member string) {
-    o.membersExcl[i] = append(o.membersExcl[i], member)
+func (o *hostgroupOffset) SetMembersExclOffset(id string, member string) {
+    o.membersExcl[id] = append(o.membersExcl[id], member)
 }
 
-func (o *hostgroupOffset) SetHostgroupMembersOffset(i int, member string) {
-    o.hostgroupMembers[i] = append(o.hostgroupMembers[i], member)
+func (o *hostgroupOffset) SetHostgroupMembersOffset(id string, member string) {
+    o.hostgroupMembers[id] = append(o.hostgroupMembers[id], member)
 }
 
-func (o *hostgroupOffset) SetHostgroupMembersExclOffset(i int, member string) {
-    o.hostgroupMembersExcl[i] = append(o.hostgroupMembersExcl[i], member)
+func (o *hostgroupOffset) SetHostgroupMembersExclOffset(id string, member string) {
+    o.hostgroupMembersExcl[id] = append(o.hostgroupMembersExcl[id], member)
 }
 
-func (o *hostgroupOffset) SetTemplateHostgroupsOffset(i int, hostgroup string) {
-    o.templateHostgroups[i] = append(o.templateHostgroups[i], hostgroup)
+func (o *hostgroupOffset) SetTemplateHostgroupsOffset(id string, hostgroup string) {
+    o.templateHostgroups[id] = append(o.templateHostgroups[id], hostgroup)
+}
+
+func (o *hostgroupOffset) SetDeletedHostgroup(hostgroup string) {
+    o.hgrpDeleted = append(o.hgrpDeleted, hostgroup)
+}
+func (o *hostgroupOffset) GetEnabledDisabledHostgroup() attrVal {
+    return o.hgrpEnabledDisabledName
+}
+
+func (o *hostgroupOffset) GetDeletedHostgroup() attrVal {
+    return o.hgrpDeleted
 }
 
 func (o *hostgroupOffset) SetEnabledHostgroup() {
@@ -240,6 +287,11 @@ func (o *hostgroupOffset) SetEnabledHostgroup() {
         }
     }
     o.hgrpEnabledName = *o.hgrpEnabled
+}
+
+func (o *hostgroupOffset) SetEnabledDisabledHostgroup() {
+    o.hgrpEnabledDisabledName = append(o.hgrpEnabledDisabledName, o.hgrpEnabledName...)
+    o.hgrpEnabledDisabledName = append(o.hgrpEnabledDisabledName, o.hgrpDisabledName...)
 }
 
 func (o *hostOffset) SetEnabledHostgroups(hg *hostgroupOffset) {
@@ -315,8 +367,21 @@ func (o *serviceOffset) GetUseOffset() offset {
 func (o *serviceOffset) GetEnabledServiceName() attrVal {
     return o.svcEnabledName
 }
+
 func (o *serviceOffset) GetEnabledTemplateName() attrVal {
     return o.tmplEnabledName
+}
+
+func (o *serviceOffset) GetDisabledTemplateName() attrVal {
+    return o.tmplDisabledName
+}
+
+func (o *serviceOffset) GetEnabledDisabledTemplateName() attrVal {
+    return o.tmplEnabledDisabledName
+}
+
+func (o *serviceOffset) GetEnabledDisabledServiceName() *attrVal {
+    return &o.svcEnabledDisabledName
 }
 
 func (o *serviceOffset) GetDisabledServiceName() attrVal {
@@ -324,55 +389,96 @@ func (o *serviceOffset) GetDisabledServiceName() attrVal {
 }
 
 // serviceOffset Setters
-func (o *serviceOffset) SetHostNameOffset(i int, member string) {
-    o.hostName[i] = append(o.hostName[i], member)
+func (o *serviceOffset) SetHostNameOffset(id string, member string) {
+    o.hostName[id] = append(o.hostName[id], member)
 }
 
-func (o *serviceOffset) SetHostNameExclOffset(i int, member string) {
-    o.hostNameExcl[i] = append(o.hostNameExcl[i], member)
+func (o *serviceOffset) SetHostNameExclOffset(id string, member string) {
+    o.hostNameExcl[id] = append(o.hostNameExcl[id], member)
 }
 
-func (o *serviceOffset) SetHostgroupNameOffset(i int, member string) {
-    o.hostgroupName[i] = append(o.hostgroupName[i], member)
+func (o *serviceOffset) SetHostgroupNameOffset(id string, member string) {
+    o.hostgroupName[id] = append(o.hostgroupName[id], member)
 }
 
-func (o *serviceOffset) SetHostgroupNameExclOffset(i int, member string) {
-    o.hostgroupNameExcl[i] = append(o.hostgroupNameExcl[i], member)
+func (o *serviceOffset) SetHostgroupNameExclOffset(id string, member string) {
+    o.hostgroupNameExcl[id] = append(o.hostgroupNameExcl[id], member)
 }
 
-func (o *serviceOffset) SetUseOffset(i int, tmpl string) {
-    o.use[i] = append(o.use[i], tmpl)
+func (o *serviceOffset) SetUseOffset(id string, tmpl string) {
+    o.use[id] = append(o.use[id], tmpl)
 }
 
-func (o *serviceOffset) SetTemplateHostgroupNameOffset(i int, hostgroup string) {
-    o.templateHostgroupName[i] = append(o.templateHostgroupName[i], hostgroup)
+func (o *serviceOffset) SetTemplateHostgroupNameOffset(id string, hostgroup string) {
+    o.templateHostgroupName[id] = append(o.templateHostgroupName[id], hostgroup)
 }
 
-func (o *serviceOffset) SetTemplateHostgroupNameExclOffset(i int, hostgroup string) {
-    o.templateHostgroupNameExcl[i] = append(o.templateHostgroupNameExcl[i], hostgroup)
+func (o *serviceOffset) SetTemplateHostgroupNameExclOffset(id string, hostgroup string) {
+    o.templateHostgroupNameExcl[id] = append(o.templateHostgroupNameExcl[id], hostgroup)
 }
 
-func (o *serviceOffset) SetTemplateHostNameOffset(i int, hostname string) {
-    o.templateHostName[i] = append(o.templateHostName[i], hostname)
+func (o *serviceOffset) SetTemplateHostNameOffset(id string, hostname string) {
+    o.templateHostName[id] = append(o.templateHostName[id], hostname)
 }
 
-func (o *serviceOffset) SetTemplateHostNameExclOffset(i int, hostname string) {
-    o.templateHostNameExcl[i] = append(o.templateHostNameExcl[i], hostname)
+func (o *serviceOffset) SetTemplateHostNameExclOffset(id string, hostname string) {
+    o.templateHostNameExcl[id] = append(o.templateHostNameExcl[id], hostname)
+}
+
+func (o *serviceOffset) SetDeletedTemplate(tmpl string) {
+    o.tmplDeleted = append(o.tmplDeleted, tmpl)
+}
+
+func (o *serviceOffset) SetHybridService(svc string) {
+    o.svcOthers = append(o.svcOthers, svc)
+}
+
+func (o *serviceOffset) SetDeletedService(svc string) {
+    o.svcDeleted = append(o.svcDeleted, svc)
 }
 
 func (o *serviceOffset) SetEnabledServiceTemplate() {
     enabledTemplate := attrVal{}
     for _, v := range o.templateHostgroupName {
         for _,t := range v{
+            if !enabledTemplate.Has(t) {
             enabledTemplate.Add(t)
+            }
         }
     }
     for _, v := range o.templateHostName {
         for _,t := range v{
+            if !enabledTemplate.Has(t) {
             enabledTemplate.Add(t)
+            }
         }
     }
     o.tmplEnabledName = enabledTemplate
+    o.tmplEnabledDisabledName = append(o.tmplEnabledDisabledName, enabledTemplate...)
+}
+
+func (o *serviceOffset) SetDisabledServiceTemplate() {
+    disabledTemplate := attrVal{}
+    for _, v := range o.templateHostgroupNameExcl {
+        for _,t := range v{
+            if !disabledTemplate.Has(t){
+            disabledTemplate.Add(t)
+            }
+        }
+    }
+    for _, v := range o.templateHostNameExcl {
+        for _,t := range v{
+            if !disabledTemplate.Has(t){
+            disabledTemplate.Add(t)
+            }
+        }
+    }
+    o.tmplDisabledName = disabledTemplate
+    for _, t := range disabledTemplate {
+        if !o.tmplEnabledDisabledName.Has(t){
+            o.tmplEnabledDisabledName = append(o.tmplEnabledDisabledName, t)
+        }
+    }
 }
 
 func (o *serviceOffset) SetEnabledService() {
@@ -400,6 +506,7 @@ func (o *serviceOffset) SetEnabledService() {
     }
     o.svcEnabled = *svcEnabled
     _,o.svcEnabledName = o.svcEnabled.ToSlice()
+    o.svcEnabledDisabledName = o.svcEnabledName
     
 }
 
@@ -410,10 +517,11 @@ func (o *serviceOffset) SetDisabledService() {
     }
     o.svcDisabled = *svcDisabled
     _, o.svcDisabledName = o.svcDisabled.ToSlice()
+    o.svcEnabledDisabledName = append(o.svcEnabledDisabledName, o.svcDisabledName...)
 }
 
 // hostOffset Getters
-func (h *hostOffset) GetHostOffset() int {
+func (h *hostOffset) GetHostOffset() string {
     return h.hostIndex
 }
 
@@ -441,7 +549,7 @@ func (h *hostOffset) GetDisabledHostgroupsName() attrVal {
 }
 
 // hostOffset Setters
-func (h *hostOffset) SetHostOffset(hostIndex int) {
+func (h *hostOffset) SetHostOffset(hostIndex string) {
     h.hostIndex = hostIndex
 }
 
@@ -449,24 +557,24 @@ func (h *hostOffset) SetHostName(hostName string) {
     h.hostName = hostName
 }
 
-func (h *hostOffset) SetTemplateHostgroupsOffset(idx int, hgrp *attrVal) {
-    h.templateHostgroups[idx] = append(h.templateHostgroups[idx], *hgrp...)
+func (h *hostOffset) SetTemplateHostgroupsOffset(id string, hgrp *attrVal) {
+    h.templateHostgroups[id] = append(h.templateHostgroups[id], *hgrp...)
 }
 
-func (h *hostOffset) SetTemplateOrder(idx int) {
-    h.templateOrder = append(h.templateOrder, idx)
+func (h *hostOffset) SetTemplateOrder(id string) {
+    h.templateOrder = append(h.templateOrder, id)
 }
 
-func (h *hostOffset) SetTemplateHostgroupsExclOffset(idx int, hgrp *attrVal) {
-    h.templateHostgroupsExcl[idx] = append(h.templateHostgroupsExcl[idx], *hgrp...)
+func (h *hostOffset) SetTemplateHostgroupsExclOffset(id string, hgrp *attrVal) {
+    h.templateHostgroupsExcl[id] = append(h.templateHostgroupsExcl[id], *hgrp...)
 }
 
-func (h *hostOffset) SetHostgroupsOffset(idx int, hgrp *attrVal) {
-    h.hostgroups[idx] = append(h.hostgroups[idx], *hgrp...)
+func (h *hostOffset) SetHostgroupsOffset(id string, hgrp *attrVal) {
+    h.hostgroups[id] = append(h.hostgroups[id], *hgrp...)
 }
 
-func (h *hostOffset) SetHostgroupsExclOffset(idx int, hgrp *attrVal) {
-    h.hostgroupsExcl[idx] = append(h.hostgroupsExcl[idx], *hgrp...)
+func (h *hostOffset) SetHostgroupsExclOffset(id string, hgrp *attrVal) {
+    h.hostgroupsExcl[id] = append(h.hostgroupsExcl[id], *hgrp...)
 }
 
 func (h *hostOffset) SetHostDefinition(hDef def) {
@@ -477,8 +585,8 @@ func (h *hostOffset) GetHostIndex() offset {
     return h.host
 }
 
-func (h *hostOffset) SetHostIndex(idx int, hostName string) {
-    h.host[idx] = append(h.host[idx], hostName)
+func (h *hostOffset) SetHostIndex(id string, hostName string) {
+    h.host[id] = append(h.host[id], hostName)
 }
 
 func (o *hostOffset) SetEnabledHostgroupsName() {
@@ -562,7 +670,7 @@ func (s *attrVal) RegexHas(item string) bool{
 }
 
 // Check if an item exist in both slices
-func (s *attrVal) HasAny(items []string) bool{
+func (s *attrVal) HasAny(items ...string) bool{
     for _,v := range *s {
         for _, item := range items{
             if v == item{
