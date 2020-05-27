@@ -156,7 +156,7 @@ func getObjDefs(data string) (*obj, error) {
     }
     } else {
         err := errors.New("no nagios object definition found")
-        return  nil,&objectNotFoundError{err}
+        return  nil,&NotFoundError{err, "Fatal", ""} 
     }
     return objDefs, nil
 }
@@ -188,6 +188,7 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
     // add hostgroups extracted from host obj definition to hostgroups list in the hostgroupOffset
     hOffset.SetEnabledHostgroups(hgrpOffset)
     (*hgrpOffset).SetEnabledDisabledHostgroup()
+    fmt.Println(hgrpOffset.members)
     return *hgrpOffset
 }
 
@@ -405,6 +406,9 @@ func findHost(d *defs ,t *defs, hostname string) hostOffset {
                 }
                 if def.attrExist("hostgroups") {
                     hOffset.SetHostgroupsOffset(idx, def["hostgroups"])
+                }
+                if def.attrExist("address") {
+                    hOffset.hostAddr = def["address"].ToString()
                 }
                 break
             }

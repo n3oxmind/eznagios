@@ -1,13 +1,18 @@
 PREFIX = /usr/local/bin
-obj = eznag
 
+all: gonag
 
-all: eznag
+gonag:
+	@go build -o gonag main.go formatter.go objtype.go attributes.go collection.go colors.go errors.go parser.go
+	@echo "Successfully built gonag"
 
-eznag: $(obj)
-	go build -o eznag main.go formater.go objstype.go attributes.go collection.go colors.go errors.go parser.go
 
 run:
-	go run eznag
+	go run gonag
 
-clean: rm -f eznag
+install: gonag
+	@mv gonag $(PREFIX)/gonag
+	@echo "Installed gonag to $(PREFIX)/gonag"
+
+clean:
+	@rm -f gonag

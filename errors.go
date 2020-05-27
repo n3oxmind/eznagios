@@ -27,13 +27,11 @@ type duplicateAttributeError struct {
 
 }
 
-// Nagios object not found error 
-type objectNotFoundError struct {
-    err error
-}
-// Nagios object definition not found
-type DefNotFoundError struct {
-    err error
+// object not found error
+type NotFoundError struct {
+    err error           // what happen
+    errType string      // error type warn,fatal,error,info
+    value string        // object value 
 }
 
 // unknown object error format
@@ -50,12 +48,12 @@ func (e *duplicateAttributeError) Error() string {
 }
 
 // object not found error format
-func (e *objectNotFoundError) Error() string {
-    return fmt.Sprintf("ObjectNotFound: %vFatal%v: %v",Fatal,RST,e.err)
-}
-// definition not found error format
-func (e *DefNotFoundError) Error() string {
-    return fmt.Sprintf("ObjectNotFound: %vWarn%v: %v",Warn,RST,e.err)
+func (e *NotFoundError) Error() string {
+    if e.errType == "Warn" {
+        return fmt.Sprintf("NotFound: %vWarn%v: %v '%v'",Yellow, RST, e.err, e.value)
+    } else {
+        return fmt.Sprintf("NotFound: %v%v%v: '%v'",Red,e.errType, RST, e.err, e.value)
+    }
 }
 
 // parsing error format

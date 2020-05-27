@@ -40,7 +40,7 @@ func (o *offset) isEmpty() bool {
 }
 
 // Check if slice (o) contains a list of elements (flags)
-func (o *boolFlag) HasAll(flags ...string) bool {
+func (o *boolFlagsList) HasAll(flags ...string) bool {
     if *o == nil {
         return false
     }
@@ -168,12 +168,12 @@ func (o attrVal) ToString() string {
     return str
 }
 // Convert []string to flag
-func ToFlag(slc *[]string) *boolFlag {
+func ToFlag(slc *[]string) *boolFlagsList {
     if len(*slc) == 0 {
         return nil
     }
 
-    flags := boolFlag{}
+    flags := boolFlagsList{}
     for _, v := range *slc {
         flags = append(flags, v)
     }

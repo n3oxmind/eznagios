@@ -7,10 +7,10 @@ import (
 )
 // named types that will be used through out the code
 type rawDef [][]string                    // raw data read from .cfg files
-type attrVal []string
+type attrVal []string                     // nagois object attribute value
 type def map[string]*attrVal              // nagios object definition
-type defs map[string]def                           // nagios object definitons
-type offset map[string][]string              // nagios object attribute offset in defs
+type defs map[string]def                  // nagios object definitons
+type offset map[string][]string           // nagios object attribute offset
 
 // nagios object definition struct
 type obj struct {
@@ -50,6 +50,7 @@ type serviceOffset struct {
     svcDeleted                  attrVal     // deleted service object definition
     svcOthers                    attrVal     // service definition that has name and service_description attributes ( useful for printHostInfo )
 }
+
 // nagios hostgroup obj struct
 //TODO: use set instead of offset map[string]{}
 type hostgroupOffset struct {
@@ -65,6 +66,7 @@ type hostgroupOffset struct {
     hgrpEnabledDisabledName     attrVal     // active and excluded hgroups
     hgrpDeleted                 attrVal     // deleted hostgroup object definition
 }
+
 // nagios host obj struct
 type hostOffset struct {
     hostgroups                  offset      // hostgroups defined in host object definition
@@ -75,10 +77,28 @@ type hostOffset struct {
     hostDef                     def         // host definition
     hostIndex                   string      // host index
     hostName                    string      // hostname
+    hostAddr                    string      // host ip address
     hgrpEnabledName             []string    // 
     hgrpDisabledName            []string    //
     templateOrder               []string       // host template index order (so inheritance dont get messed up)
 }
+
+// objDict is used to hold a collection of hosts with their association
+type objDict struct{
+    hosts        hostOffset
+    services     serviceOffset
+    hostgroups   hostgroupOffset
+}
+
+// initialize objDict
+func newObjDict() *objDict {
+    o := &objDict{}
+    o.hosts = *newHostOffset()
+    o.services = *newServiceOffset()
+    o.hostgroups = *newHostGroupOffset()
+    return o
+}
+
 // obj constructor
 func newObj() *obj {
     o := &obj{}
@@ -95,6 +115,7 @@ func newObj() *obj {
     o.contactgroupDefs  = make(defs)
     return o
 }
+
 // hostOffset constructor
 func newHostOffset() *hostOffset {
 	o := &hostOffset{}
