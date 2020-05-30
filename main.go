@@ -167,13 +167,11 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
     hostnameExcl := "!"+hOffset.GetHostName()
     for idx,def := range *hg {
         if def.attrExist("members"){
-            if def["members"].RegexHas(hOffset.GetHostName()) && !hgrpOffset.GetMembersOffset().OffsetExist(idx) {
-                hostgroupName := def["hostgroup_name"].ToString()
-                hgrpOffset.SetMembersOffset(idx, hostgroupName)
-                findHostGroupMembership(hg, hostgroupName, *hgrpOffset)
-            } else if def["members"].Has(hostnameExcl) && !hgrpOffset.GetMembersExclOffset().OffsetExist(idx) {
-                hostgroupName := def["hostgroup_name"].ToString()
-                hgrpOffset.SetMembersExclOffset(idx, hostgroupName)
+            if def["members"].RegexHas(hOffset.GetHostName()) && !hgrpOffset.members.Has(idx) {
+                hgrpOffset.members.Add(idx)
+                findHostGroupMembership(hg, idx, *hgrpOffset)
+            } else if def["members"].Has(hostnameExcl) && !hgrpOffset.membersExcl.Has(idx) {
+                hgrpOffset.membersExcl.Add(idx)
             }
         }
     }
@@ -187,8 +185,6 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
     (*hgrpOffset).SetDisabledHostgroup()
     // add hostgroups extracted from host obj definition to hostgroups list in the hostgroupOffset
     hOffset.SetEnabledHostgroups(hgrpOffset)
-    (*hgrpOffset).SetEnabledDisabledHostgroup()
-    fmt.Println(hgrpOffset.members)
     return *hgrpOffset
 }
 
@@ -202,15 +198,13 @@ func findHostGroupMembership(d *defs, hgName string, hgrpOffset hostgroupOffset)
             hgrpExist = true
         }
         if def.attrExist("hostgroup_members"){
-            if def["hostgroup_members"].Has(hgName) && !hgrpOffset.GetHostgroupMembersOffset().OffsetExist(idx){
-                hostgroupName := def["hostgroup_name"].ToString()
-                hgrpOffset.SetHostgroupMembersOffset(idx,hostgroupName)
-                findHostGroupMembership(d, hostgroupName, hgrpOffset)
+            if def["hostgroup_members"].Has(hgName) && !hgrpOffset.hostgroupMembers.Has(idx){
+                hgrpOffset.hostgroupMembers.Add(idx)
+                findHostGroupMembership(d, idx, hgrpOffset)
                 // I dont think you can exclude hostgroup in hostgroup object definition
                 // this could be removed if the above is true 100%
-            } else if def["hostgroup_members"].Has(hostgroupNameExcl) && !hgrpOffset.GetHostgroupMembersExclOffset().OffsetExist(idx){
-                hostgroupName := def["hostgroup_name"].joinAttrVal()
-                hgrpOffset.SetHostgroupMembersExclOffset(idx,hostgroupName)
+            } else if def["hostgroup_members"].Has(hostgroupNameExcl) && !hgrpOffset.hostgroupMembers.Has(idx){
+                hgrpOffset.hostgroupMembersExcl.Add(idx)
             }
         }
     }
@@ -233,39 +227,39 @@ func find(s []string, pattern string) (int, bool) {
 func findServices(d *defs, t *defs, hostgroups hostgroupOffset, hostname string) serviceOffset {
     svcOffset := newServiceOffset()
     hostnameExcl := "!"+hostname
-    hgEnabled := hostgroups.GetEnabledHostgroupName()
+    hgEnabled := hostgroups.enabled
     hgExcluded := AddEP(hgEnabled)
     // search template inheritance (recursively) for association
     findServiceTemplate(t, svcOffset,hostname, &hgEnabled, hgExcluded)
-    tmplEnabled := svcOffset.GetEnabledTemplateName()
+    tmplEnabled := svcOffset.tmpl.enabled
     for idx, def := range *d {
         hasAssociation := false
         // check if service definition contain host_name attribute
         if  def.attrExist("host_name"){
             if def["host_name"].RegexHas(hostname) {
-                svcOffset.SetHostNameOffset(idx, def["service_description"].ToString())
+                svcOffset.hostName.Add(idx)
                 hasAssociation = true
             }
             if def["host_name"].Has(hostnameExcl){
-                svcOffset.SetHostNameExclOffset(idx, def["service_description"].ToString())
+                svcOffset.hostNameExcl.Add(idx)
                 hasAssociation = true
             }
         }
         // check if service definition contains hostgroup_name attribute
         if def.attrExist("hostgroup_name"){
             if def["hostgroup_name"].HasAny(hgEnabled...) {
-                svcOffset.SetHostgroupNameOffset(idx,def["service_description"].ToString())
+                svcOffset.hostgroupName.Add(idx)
                 hasAssociation = true
             }
             if def["hostgroup_name"].HasAny(*hgExcluded...){
-                svcOffset.SetHostgroupNameExclOffset(idx, def["service_description"].ToString())
+                svcOffset.hostgroupNameExcl.Add(idx)
                 hasAssociation = true
             }
         }
         // service definition that does not have hostname/hostgroup_name attr just 'use'
-        if def.attrExist("use") && !hasAssociation{
+        if def.attrExist("use") && !hasAssociation {
             if def["use"].HasAny(tmplEnabled...){
-                svcOffset.SetUseOffset(idx, def["service_description"].ToString())
+                svcOffset.use.Add(idx)
             }
         }
     }
@@ -284,40 +278,40 @@ func findServiceTemplate(t *defs, svcOffset *serviceOffset, hostname string,  hg
         if def.attrExist("host_name") {
             if def["host_name"].RegexHas(hostname){
                 if def.attrExist("name"){
-                    svcOffset.SetTemplateHostNameOffset(idx,def["name"].joinAttrVal())
+                    svcOffset.Add("tmplHostName", idx, idx )
                     if def.attrExist("service_description") {
-                        svcOffset.SetHybridService(def["service_description"].ToString())
+                        svcOffset.others.Add(def["service_description"].ToString())
                     }
                 }else {
-                    svcOffset.SetHostNameOffset(idx, def["service_description"].ToString())
+                    svcOffset.hostName.Add(def["service_description"].ToString())
                 }
                 hasAssociation = true
             }
             if def["host_name"].RegexHas("!"+hostname){
                 if def.attrExist("name"){
-                    svcOffset.SetTemplateHostNameExclOffset(idx,def["name"].joinAttrVal())
+                    svcOffset.Add("tmplHostNameExcl", idx, idx )
                 }else{
-                    svcOffset.SetHostNameExclOffset(idx, def["service_description"].ToString())
+                    svcOffset.hostNameExcl.Add(def["service_description"].ToString())
                 }
             }
         }
         if def.attrExist("hostgroup_name"){
             if def["hostgroup_name"].HasAny(*hgEnabled...){
                 if def.attrExist("name"){
-                    svcOffset.SetTemplateHostgroupNameOffset(idx,def["name"].joinAttrVal())
+                    svcOffset.Add("tmplHostgroupName", idx, idx )
                     if def.attrExist("service_description") {
-                        svcOffset.SetHybridService(def["service_description"].ToString())
+                        svcOffset.others.Add(def["service_description"].ToString())
                     }
                 }else{
-                    svcOffset.SetHostgroupNameOffset(idx, def["service_description"].ToString())
+                    svcOffset.hostgroupName.Add(def["service_description"].ToString())
                 }
                 hasAssociation = true
             }
             if def["hostgroup_name"].HasAny(*hgExcluded...){
                 if def.attrExist("name"){
-                    svcOffset.SetTemplateHostgroupNameExclOffset(idx,def["name"].joinAttrVal())
+                    svcOffset.hostgroupName.Add(idx,def["name"].joinAttrVal())
                 }else{
-                    svcOffset.SetHostgroupNameExclOffset(idx, def["service_description"].ToString())
+                    svcOffset.hostgroupNameExcl.Add(def["service_description"].ToString())
                 }
             }
         }
@@ -344,38 +338,38 @@ func findServiceInheritance(t *defs, svcOffset *serviceOffset, useAttr attrVal, 
                     if def.attrExist("host_name") {
                         if def["host_name"].RegexHas(hostname){
                             if def.attrExist("name"){
-                                svcOffset.SetTemplateHostNameOffset(ID,def["name"].ToString())
+                                svcOffset.Add("tmplhostName", ID, def["name"].ToString())
                                 if def.attrExist("service_description") {
-                                    svcOffset.SetHybridService(def["service_description"].ToString())
+                                    svcOffset.others.Add(def["service_description"].ToString())
                                 }
                             }else {
-                                svcOffset.SetHostNameOffset(ID, def["service_description"].ToString())
+                                svcOffset.Add("tmplhostName", ID, def["service_description"].ToString())
                             }
                         }
                         if def["host_name"].RegexHas("!"+hostname){
                             if def.attrExist("name"){
-                                svcOffset.SetTemplateHostNameExclOffset(ID,def["name"].ToString())
+                                svcOffset.Add("tmplhostNameExcl", ID, def["name"].ToString())
                             }else{
-                                svcOffset.SetHostNameExclOffset(ID, def["service_description"].ToString())
+                                svcOffset.Add("tmplhostNameExcl", ID, def["service_description"].ToString())
                             }
                         }
                     }
                     if def.attrExist("hostgroup_name"){
                         if def["hostgroup_name"].HasAny(*hgEnabled...){
                             if def.attrExist("name"){
-                                svcOffset.SetTemplateHostgroupNameOffset(ID,def["name"].ToString())
+                                svcOffset.Add("tmplhostgroupName", ID, def["name"].ToString())
                                 if def.attrExist("service_description") {
-                                    svcOffset.SetHybridService(def["service_description"].ToString())
+                                    svcOffset.others.Add(def["service_description"].ToString())
                                 }
                             }else{
-                                svcOffset.SetHostgroupNameOffset(ID, def["service_description"].ToString())
+                                svcOffset.Add("tmplhostgroupName", ID, def["service_description"].ToString())
                             }
                         }
                         if def["hostgroup_name"].HasAny(*hgExcluded...){
                             if def.attrExist("name"){
-                                svcOffset.SetTemplateHostgroupNameExclOffset(ID,def["name"].ToString())
+                                svcOffset.Add("tmplhostgroupNameExcl", ID, def["name"].ToString())
                             }else{
-                                svcOffset.SetHostgroupNameExclOffset(ID, def["service_description"].ToString())
+                                svcOffset.Add("tmplhostgroupNameExcl", ID, def["service_description"].ToString())
                             }
                         }
                     }
@@ -451,10 +445,11 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
     sd := objectDefs.serviceDefs
     st := objectDefs.serviceTempDefs
     ht := objectDefs.hostTempDefs
-    tmplEnabledDisabled := svc.GetEnabledDisabledTemplateName()
+    svcEnabledDisabled := Union(&svc.enabled, &svc.disabled)
+    tmplEnabledDisabled := svc.tmpl.enabledDisabled
     deleteServiceTemplate(&sd, &st, &ht, svc, tmplEnabledDisabled, hgrpDeleted, hostname)
     unregisterTemplate := attrVal{"0"}
-    for _, v := range *svc.GetEnabledDisabledServiceName() {
+    for v := range svcEnabledDisabled.m{
         if sd[v].attrExist("host_name"){
             sd[v]["host_name"].deleteAttrVal(&sd , &ht, v, "SVC HOSTNAME", hostname, hostname)
             if len(*sd[v]["host_name"]) == 0 {
@@ -471,7 +466,7 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
         }
         if !sd[v].attrExist("host_name") && !sd[v].attrExist("hostgroup_name"){                                    // delete hostgroup obj definition
             if sd[v].attrExist("use") {
-                sd[v]["use"].deleteAttrVal(&sd, &ht, v, "SVC USE", "use", hostname, svc.tmplDeleted...)
+                sd[v]["use"].deleteAttrVal(&sd, &ht, v, "SVC USE", "use", hostname, svc.tmpl.deleted...)
                 if len(*sd[v]["use"]) == 0 {
                     if !sd[v].attrExist("register") || sd[v]["register"].ToString() == "1" {
                         if sd[v].attrExist("name") && isTemplateBeingUsed(&sd, &st, sd[v]["name"].ToString()){
@@ -480,13 +475,13 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
                             printDeletion(v, "SVC USE", "use", "", "attr")
                             delete(sd[v], "use")
                             printDeletion(v, "SVC", "", "", "def")
-                            svc.SetDeletedService(v)
+                            svc.deleted.Add(v)
                             delete(sd, v)
                         }
                     }else {
                         if !sd[v].attrExist("name") || (sd[v].attrExist("name") && !isTemplateBeingUsed(&sd, &st,sd[v]["name"].ToString())){
                             printDeletion(v, "SVC", "","", "def")
-                            svc.SetDeletedService(v)
+                            svc.deleted.Add(v)
                             delete(sd, v)
                         }
                     }
@@ -496,13 +491,13 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
                             sd[v]["register"] = &unregisterTemplate
                         }else{
                             printDeletion(v, "SVC", "", "", "def")
-                            svc.SetDeletedService(v)
+                            svc.deleted.Add(v)
                             delete(sd, v)
                         }
                     } else if isSafeDeleteTemplate(&st, *sd[v]["use"], hgrpDeleted, hostname){
                         if !sd[v].attrExist("name") || (sd[v].attrExist("name") && !isTemplateBeingUsed(&sd, &st, v)){
                             printDeletion(v, "SVC", "","", "def")
-                            svc.SetDeletedService(v)
+                            svc.deleted.Add(v)
                             delete(sd, v)
                         }
                     }
@@ -513,13 +508,13 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
                         sd[v]["register"] = &unregisterTemplate
                     }else{
                         printDeletion(v, "SVC", "", "", "def")
-                        svc.SetDeletedService(v)
+                        svc.deleted.Add(v)
                         delete(sd, v)
                     }
                 }else {
                     if !sd[v].attrExist("name") || (sd[v].attrExist("name") && !isTemplateBeingUsed(&sd, &st,sd[v]["name"].ToString())){
                         printDeletion(v, "SVC", "","", "def")
-                        svc.SetDeletedService(v)
+                        svc.deleted.Add(v)
                         delete(sd, v)
                     }
                 }
@@ -550,7 +545,7 @@ func deleteServiceTemplate(sd *defs, st *defs, ht *defs, svc *serviceOffset, tmp
                 if (*st)[t].attrExist("use") && !isTemplateBeingUsed(sd, st, t){
                     if isSafeDeleteTemplate(st, *(*st)[t]["use"], hgrpDeleted, hostname) {
                         printDeletion(t, "SVCTMPL", "", "", "def")
-                        svc.SetDeletedTemplate(t)
+                        svc.tmpl.deleted.Add(t)
                         delete(*st, t)
                     }
                 } else if isTemplateBeingUsed(sd, st, t){
@@ -559,7 +554,7 @@ func deleteServiceTemplate(sd *defs, st *defs, ht *defs, svc *serviceOffset, tmp
                     fmt.Printf("%vRegister%v:%v[SVCTMPL EDIT]%v: Unregister service template %v\n", Yellow, RST, Blue, RST, t)
                 } else {
                     printDeletion(t, "SVCTMPL", "", "", "def")
-                    svc.SetDeletedTemplate(t)
+                    svc.tmpl.deleted.Add(t)
                     delete(*st, t)
                 }
             } else if (*st)[t].attrExist("use") && !isTemplateBeingUsed(sd, st, t){
@@ -720,7 +715,7 @@ func deleteHostgroup(objectDefs *obj, hg *hostgroupOffset, hostname string){
     hgd := objectDefs.hostgroupDefs
     hd := objectDefs.hostDefs
     td := objectDefs.hostTempDefs
-    for _, v := range hg.GetEnabledDisabledHostgroup() {
+    for _, v := range hg.enabledDisabled {
         if hgd[v].attrExist("members") {
             hgd[v]["members"].deleteAttrVal(&hd, &td, v, "HGRP MEMBERS", "members", hostname, hostname)
             if len(*hgd[v]["members"]) == 0 {
@@ -728,7 +723,7 @@ func deleteHostgroup(objectDefs *obj, hg *hostgroupOffset, hostname string){
                 delete((hgd)[v], "members" )
                 if !hgd[v].attrExist("hostgroup_members") {
                     printDeletion(v,"HGRP", "", "", "def")
-                    hg.SetDeletedHostgroup(v)
+                    hg.deleted.Add(v)
                     delete(hgd, v)
                     //recursive deletion for hostgroups inherited from this hostgroup
                     deleteHostgroupMembership(&hgd,&td, hg, v, hostname)
@@ -740,7 +735,7 @@ func deleteHostgroup(objectDefs *obj, hg *hostgroupOffset, hostname string){
 
 // deleted inhereted hostgroup
 func deleteHostgroupMembership(hgd *defs, td *defs, hgrp *hostgroupOffset, hgrpName string, hostname string) {
-    for _, v := range hgrp.GetEnabledDisabledHostgroup() {
+    for _, v := range hgrp.enabledDisabled{
         if (*hgd)[v].attrExist("hostgroup_members") {
             (*hgd)[v]["hostgroup_members"].deleteAttrVal(hgd, td, v, "hostgroup_members", hostname, hgrpName)
             if len(*(*hgd)[v]["hostgroup_members"]) == 0 {
@@ -748,7 +743,7 @@ func deleteHostgroupMembership(hgd *defs, td *defs, hgrp *hostgroupOffset, hgrpN
                 delete((*hgd)[v], "hostgroup_members")
                 if !(*hgd)[v].attrExist("members"){
                     printDeletion(v,"HGRP", "", "", "def")
-                    hgrp.SetDeletedHostgroup(v)
+                    hgrp.deleted.Add(v)
                     delete(*hgd, v)
                     //recursive deletion for hostgroups inherited from this hostgroup
                     deleteHostgroupMembership(hgd, td, hgrp, v, hostname)

@@ -161,6 +161,14 @@ func (o *offset) ToSlice() (id []string, val attrVal) {
     return id,val
 }
 
+func (o *Set) ToSlice() (attrVal) {
+    slc := attrVal{}
+    for k := range o.m {
+        slc = append(slc,k)
+        }
+    return slc
+}
+
 // Convert []string to string
 func (o attrVal) ToString() string {
     str := ""
@@ -178,4 +186,91 @@ func ToFlag(slc *[]string) *boolFlagsList {
         flags = append(flags, v)
     }
     return &flags
+}
+
+// interface as set
+var exists = struct{}{} // take 0 byte
+
+func NewSet() *Set {
+    s := &Set{}
+    s.m = make(map[string]struct{})
+    return s
+}
+
+// emulate set with struct of a map
+type Set struct {
+    m map[string]struct{}
+}
+
+// Add items to the set
+func (s *Set) Add(items ...string){
+    for _, item := range items {
+        s.m[item] = exists
+    }
+}
+
+// Remove item from set
+func (s *Set) Remove(items ...string){
+    for _, item := range items {
+        delete(s.m, item)
+    }
+}
+
+// Check if item exist
+func (s *Set) Has(items ...string) bool{
+    has := true
+    for _, item := range items {
+        if _,has = s.m[item]; !has{
+            break
+        }
+    }
+    return has
+}
+
+// Remove all items from set
+func (s *Set) Clear() {
+    s.m = make(map[string]struct{})
+}
+
+// Calculate set size
+func (s *Set) Size() int {
+    return len(s.m)
+}
+
+// check set is empty
+func (s *Set) IsEmpty() bool {
+    return s.Size() == 0
+}
+
+// create a new copy of set s
+func (s *Set) Copy() *Set {
+    n := NewSet()
+    for item := range s.m {
+        n.Add(item)
+    }
+    return n
+}
+// set union operation
+func Union(sets ...*Set) *Set {
+    u := NewSet()
+    for _, set := range sets {
+        for item := range set.m {
+            u.Add(item)
+        }
+    }
+    return u
+}
+
+// set intersection operation
+func Intersect(sets ...*Set) *Set {
+    all := Union(sets...)
+    for item := range all.m {
+        for _, set := range sets {
+            if !set.Has(item) {
+                all.Remove(item)
+            }
+        }
+
+    }
+    return all
 }

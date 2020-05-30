@@ -180,8 +180,8 @@ func printHostInfoPretty(dictList []objDict, termWidth int) {
     hgrps := make([]attrVal, len(dictList))
     hosts := make([]attrVal, len(dictList))
     for i, dict := range dictList {
-        svc  := append(dict.services.svcEnabledName, dict.services.svcOthers...)
-        hgrp := dict.hostgroups.GetEnabledHostgroupName()
+        svc  := append(dict.services.enabled.ToSlice(), dict.services.others...)
+        hgrp := dict.hostgroups.enabled
 
         // max length of an object attribute
         hostAttrLen := len(dict.hosts.GetHostName())
@@ -245,8 +245,8 @@ func (d *defs) printDef(objType string, ids ...string) {
 }
 // print host info not pretty but live ( show host as you find it )
 func printHostInfo(hostname string, hostAddr string, hostgroups hostgroupOffset, services serviceOffset) {
-    svc := append(services.svcEnabledName, services.svcOthers...)
-    hgrp := hostgroups.GetEnabledHostgroupName()
+    svc := append(services.enabled.ToSlice(), services.others...)
+    hgrp := hostgroups.enabled
     svcSize := len(svc)
     hgrpSize := len(hgrp)
     svcAttrMaxLeng := MaxLen(&svc)

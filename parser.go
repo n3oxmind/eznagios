@@ -474,8 +474,8 @@ func main() {
             hostgroups := findHostGroups(&objDefs.hostgroupDefs, &objDefs.hostTempDefs, host)
             // search services association
             services := findServices(&objDefs.serviceDefs, &objDefs.serviceTempDefs, hostgroups, host.GetHostName())
-            if services.GetEnabledServiceName() == nil {
-                services.svcEnabledName = append(services.svcEnabledName, "Not Found")
+            if services.enabled.ToSlice() == nil {
+                services.enabled.Add("Not Found")
             }
             // multiple hosts are stored in a dictionary like format
             dict.hosts = host
