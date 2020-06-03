@@ -280,7 +280,7 @@ func (o *obj) SetServiceDependencyDefs(servicedependencyDef def, idx int) {
 //    return o.hgrpDeleted
 //}
 
-func (o *hostgroupOffset) SetEnabledHostgroup() {
+func (o *hostgroupOffset) SetEnabledDisabledHostgroups() {
     hgrpEnabled := Union(&o.members, &o.hostgroupMembers)
     hgrpDisabled := Union(&o.membersExcl, &o.hostgroupMembersExcl)
     // Remove excluded hostgroups
@@ -319,14 +319,6 @@ func (o *hostOffset) SetEnabledHostgroups(hg *hostgroupOffset) {
             hg.enabled.Remove(strings.TrimLeft(v, "!"))
         }
     }
-}
-
-func (o *hostgroupOffset) SetDisabledHostgroup() {
-    disabled := Union(&o.membersExcl, &o.hostgroupMembersExcl)
-    for item := range disabled.m{
-        o.disabled.Add(item)
-    }
-    o.enabledDisabled.Add(o.disabled...)
 }
 
 // serviceOffset Setters
@@ -396,26 +388,17 @@ func (o *serviceOffset) SetDisabledServiceTemplate() {
         }
     }
 }
-
-func (o *serviceOffset) SetEnabledService() {
-    // copy service assocaition via host_name
-//    svcEnabled := o.hostName.Copy()
-    // add service association via hostgroup_name
+// set enabled and disabled service check of a specific host
+func (o *serviceOffset) SetEnabledDisabledServices() {
+    // services from host_name and hostgroup_name
     svcEnabled := Union(&o.hostName, &o.hostgroupName, &o.use)
-    // Remove excluded service declared in host_name
-    for k := range o.hostNameExcl.m {
-        svcEnabled.Remove(k)
-    }
-    // Remove excluded service declared in hostgroup_name
-    for k := range o.hostgroupNameExcl.m {
+    svcDisabled := Union(&o.hostNameExcl, &o.hostgroupNameExcl)
+    // Remove excluded services
+    for k := range svcDisabled.m {
         svcEnabled.Remove(k)
     }
     o.enabled = *svcEnabled
-}
-
-func (o *serviceOffset) SetDisabledService() {
-    svcDisabled := Union(&o.hostNameExcl, &o.hostgroupNameExcl)
-    o.disabled = *svcDisabled
+    o.disabled = *svcEnabled
 }
 
 // hostOffset Getters

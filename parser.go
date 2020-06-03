@@ -29,7 +29,6 @@ func (s *multiValues) Set(value string) error {
     return nil
 }
 
-
 // parse os.Args, handle multiplevalues option
 func parseArgs(s []string) *[]string {
     newArgs := []string{}
@@ -130,7 +129,7 @@ func formatUsage(cmd *flag.FlagSet){
                 if len(f.Name) > cmdState.maxManditoryArgLenght {
                     cmdState.maxManditoryArgLenght = len(f.Name)
                 }
-            }else if f.Name == "verbose" || f.Name == "warn" || f.Name == "pretty" {
+            }else if f.Name == "verbose" || f.Name == "warn" || f.Name == "pretty" || f.Name == "color" {
                 cmdState.flags = append(cmdState.flags, *f)
                 if len(f.Name) > cmdState.maxFlagArgLenght {
                     cmdState.maxFlagArgLenght = len(f.Name)
@@ -206,7 +205,7 @@ func setConfigFile() string  {
     }
     configDir := path.Join(usr.HomeDir,".config","gonag")
     configFile := path.Join(usr.HomeDir, ".config","gonag","gonag.json")
-    // check if eznagios config file exist  
+    // check if eznagios config file exist
     if !isFileExist(configFile) {
         fmt.Printf("%vGoNagConfig:%v Created a new gonag config\n", Green, RST)
         os.MkdirAll(configDir, os.ModePerm)
@@ -233,7 +232,7 @@ func loadEznagiosConfig() map[string]interface{}{
     configs := readConfigFile(configFilePath)
     loadedFlags := make(map[string]interface{})
 
-    // load json data 
+    // load json data
     jsonByte, _ := ioutil.ReadAll(configs)
     json.Unmarshal(jsonByte, &loadedFlags)
     // default flags values
@@ -243,6 +242,7 @@ func loadEznagiosConfig() map[string]interface{}{
     defaultFlags["color"] = false
     defaultFlags["verbose"] = false
     defaultFlags["pretty"] = false
+    defaultFlags["dryrun"] = false
 
     // load default flags from eznagios config file
     if _, set := loadedFlags["path"]; set {
@@ -260,6 +260,9 @@ func loadEznagiosConfig() map[string]interface{}{
     if _, set := loadedFlags["pretty"]; set {
         defaultFlags["pretty"] = loadedFlags["pretty"]
     }
+    if _, set := loadedFlags["dryrun"]; set {
+        defaultFlags["dryrun"] = loadedFlags["dryrun"]
+    }
     return defaultFlags
 }
 
@@ -270,6 +273,7 @@ func setActualFlags(fs *flag.FlagSet) map[string]interface{} {
     bflags["color"]     = struct{}{}
     bflags["pretty"]    = struct{}{}
     bflags["warn"]      = struct{}{}
+    bflags["dryrun"]    = struct{}{}
     visited := make(map[string]interface{})
     fs.Visit(func(f *flag.Flag){
         visited[f.Name] = f.Value
@@ -288,9 +292,10 @@ func setActualFlags(fs *flag.FlagSet) map[string]interface{} {
 }
 
 // set enabled falgs
-func setEnabledFlags(visited map[string]interface{}) map[string]interface{}{
+func setEnabledFlags(visited map[string]interface{}) (attrVal, map[string]interface{}){
     enabled := make(map[string]interface{})
     defaultFlags := loadEznagiosConfig()
+    enabledBools := []string{}
 
     // check if a flag has been visited
     sval, sd := visited["src"]
@@ -298,6 +303,7 @@ func setEnabledFlags(visited map[string]interface{}) map[string]interface{}{
     wval, wf := visited["warn"]
     cval, cf := visited["color"]
     pval, pf := visited["pretty"]
+    dval, df := visited["dryrun"]
 
     if sd {
         enabled["path"] = sval
@@ -312,18 +318,26 @@ func setEnabledFlags(visited map[string]interface{}) map[string]interface{}{
     // optional boolean flags
     if vf && vval.(bool) || !vf && defaultFlags["verbose"].(bool) {
         enabled["verbose"] = true
+        enabledBools = append(enabledBools, "verbose")
     }
     if  wf && wval.(bool) || !wf && defaultFlags["warn"].(bool) {
         enabled["warn"] = true
+        enabledBools = append(enabledBools, "warn")
     }
     if pf && pval.(bool) || !pf && defaultFlags["pretty"].(bool) {
         enabled["pretty"] = true
+        enabledBools = append(enabledBools, "pretty")
     }
     if cf && cval.(bool) || !cf && defaultFlags["color"].(bool) {
         enabled["color"] = true
+        enabledBools = append(enabledBools, "color")
+    }
+    if df && dval.(bool) || !df && defaultFlags["dryrun"].(bool) {
+        enabled["dryrun"] = true
+        enabledBools = append(enabledBools, "dryrun")
     }
 
-    return enabled
+    return enabledBools, enabled
 }
 
 func main() {
@@ -366,6 +380,13 @@ func main() {
     setCommand.Bool("verbose", false, "show verbose output by default")
     setCommand.Bool("warn", false, "show warning message by default")
 
+    // delete command
+    deleteCommand.String("host", "", "hostname, Multiple hosts should be separated by comma/space. Support regex ")
+    deleteCommand.String("src", "", "path to nagios configs directory")
+    deleteCommand.String("file", "", "file contains list of hosts")
+    deleteCommand.Bool("verbose", false, "show verbose output")
+    deleteCommand.Bool("color", false, "show colorful output")
+    deleteCommand.Bool("dryrun", false, "perform deletion but dont apply changes")
     if len(os.Args) < 2 {
 //        fmt.Printf("Expected one of these subcommands %v\n", subCommandList)
         topLevelUsage()
@@ -432,7 +453,7 @@ func main() {
             fmt.Println(err)
             os.Exit(1)
         }
-        // write configs to a file 
+        // write configs to a file
         jfile, err :=  os.Create(configFile); if err != nil {
             fmt.Println(err)
             os.Exit(1)
@@ -442,7 +463,7 @@ func main() {
 
     if searchCommand.Parsed() {
         visited := setActualFlags(searchCommand)
-        enabled := setEnabledFlags(visited)
+        _,enabled := setEnabledFlags(visited)
 
         hval, sh := visited["host"]
         _, sf := visited["file"]
@@ -453,16 +474,8 @@ func main() {
             os.Exit(1)
         }
 
-        // perform serach
-        configFiles := findConfFiles(enabled["path"].(string), ".cfg", excludedDirs)
-        rawData, err := readConfFile(configFiles)
-        if err != nil {
-            panic(fmt.Sprintf("%v", err))
-        }
-        // parse nagios config file
-        objDefs, err := getObjDefs(rawData); if err != nil {
-            panic(fmt.Sprintf("%v", err))
-        }
+        // load nagios data
+        objDefs := loadNagiosData(enabled["path"], ".cfg", excludedDirs)
         // parse host args
         knownHosts, unknownHosts, noRegex := parseRegex(hval.([]string), &objDefs.hostDefs)
         dictList := []objDict{}
@@ -507,8 +520,46 @@ func main() {
 
     }
     if deleteCommand.Parsed() {
-        fmt.Println("here")
+        visited := setActualFlags(deleteCommand)
+        bflags, enabled := setEnabledFlags(visited)
 
+        hval, sh := visited["host"]
+        _, sf := visited["file"]
+        // required flags
+        if !sh && !sf {
+            err := errors.New("--host or --file option is required")
+            fmt.Println(&parsingError{err})
+            os.Exit(1)
+        }
+        // load nagios data
+        objDefs := loadNagiosData(enabled["path"], ".cfg", excludedDirs)
+        // parse host arg
+        knownHosts, unknownHosts, noRegex := parseRegex(hval.([]string), &objDefs.hostDefs)
+        for _, h := range knownHosts {
+            // search for host object
+            host := findHost(&objDefs.hostDefs, &objDefs.hostTempDefs, h)
+            // serach hostgroups association
+            hostgroups := findHostGroups(&objDefs.hostgroupDefs, &objDefs.hostTempDefs, host)
+            // search services association
+            services := findServices(&objDefs.serviceDefs, &objDefs.serviceTempDefs, hostgroups, h)
+            // perform deletion
+            deleteHost(&objDefs.hostDefs, &objDefs.hostTempDefs, &host, bflags)
+            deleteHostgroup(objDefs, &hostgroups, h, bflags)
+            deleteService(objDefs, &services, hostgroups.deleted, h, bflags)
+        }
+        for _, v := range unknownHosts {
+            err := errors.New("host not found")
+            fmt.Println(&NotFoundError{err, "Warn", v})
+        }
+        for _, v := range noRegex {
+            err := errors.New("regex match nothing")
+            fmt.Println(&NotFoundError{err, "Warn", v})
+        }
+        // write new files
+        WriteFile(&objDefs.hostDefs, "hosts.cfg", "host", bflags)
+        WriteFile(&objDefs.hostgroupDefs, "hostgroups.cfg", "hostgroup", bflags)
+        WriteFile(&objDefs.serviceDefs, "services.cfg", "service", bflags)
+        WriteFile(&objDefs.serviceTempDefs, "servicestemplates.cfg", "servicetemplate", bflags)
     }
 }
 
@@ -548,5 +599,18 @@ func parseRegex (s []string, d *defs) ([]string, []string, []string){
     sort.Strings(unknownHosts)
     sort.Strings(reNoMatch)
     return knownHosts, unknownHosts, reNoMatch
-
+}
+// parse and load nagios config data to memory
+func loadNagiosData(cfg interface{}, fileExt string, excludedDirs []string) *obj {
+    // perform serach
+    configFiles := findConfFiles(cfg.(string), ".cfg", excludedDirs)
+    rawData, err := readConfFile(configFiles)
+    if err != nil {
+        panic(fmt.Sprintf("%v", err))
+    }
+    // parse nagios config file
+    objDefs, err := getObjDefs(rawData); if err != nil {
+        panic(fmt.Sprintf("%v", err))
+    }
+    return objDefs
 }

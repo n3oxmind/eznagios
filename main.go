@@ -181,8 +181,7 @@ func findHostGroups(hg *defs, td *defs, hOffset hostOffset) hostgroupOffset {
         findHostGroupMembership(hg, hgrp, *hgrpOffset)
     }
     // set enabled hostgroups
-    (*hgrpOffset).SetEnabledHostgroup()
-    (*hgrpOffset).SetDisabledHostgroup()
+    (*hgrpOffset).SetEnabledDisabledHostgroups()
     // add hostgroups extracted from host obj definition to hostgroups list in the hostgroupOffset
     hOffset.SetEnabledHostgroups(hgrpOffset)
     return *hgrpOffset
@@ -264,8 +263,7 @@ func findServices(d *defs, t *defs, hostgroups hostgroupOffset, hostname string)
         }
     }
     // Filter enabled and excluded/disabled services
-    (*svcOffset).SetEnabledService()
-    (*svcOffset).SetDisabledService()
+    (*svcOffset).SetEnabledDisabledServices()
     return *svcOffset
 }
 
@@ -309,7 +307,7 @@ func findServiceTemplate(t *defs, svcOffset *serviceOffset, hostname string,  hg
             }
             if def["hostgroup_name"].HasAny(*hgExcluded...){
                 if def.attrExist("name"){
-                    svcOffset.hostgroupName.Add(idx,def["name"].joinAttrVal())
+                    svcOffset.Add("tmplHostgroupNameExcl", idx, idx)
                 }else{
                     svcOffset.hostgroupNameExcl.Add(def["service_description"].ToString())
                 }
@@ -431,56 +429,56 @@ func findHostTemplate(t *defs, hOffset *hostOffset, tmplName string ){
 }
 
 // delete host obj
-func deleteHost(hd *defs, td *defs, h *hostOffset){
+func deleteHost(hd *defs, td *defs, h *hostOffset, bflags attrVal){
     if len(*(*hd)[h.hostIndex]["host_name"]) > 1 {
-        (*hd)[h.hostIndex]["host_name"].deleteAttrVal(hd, td, h.hostIndex, "HOST HOST_NAME", "host_name", h.hostName, h.hostName)
-    } else {
-        printDeletion(h.hostIndex, "HOST", "", "", "def")
+        (*hd)[h.hostIndex]["host_name"].deleteAttrVal(hd, td, h.hostIndex, "HOST HOST_NAME", "host_name", h.hostName, bflags, h.hostName)
+    }else{
+        printDeletion(h.hostIndex, "HOST", "", "", "def", bflags)
         delete(*hd, h.GetHostName())
     }
     // TODO: checkif host template is being used or not
 }
 // delete service association
-func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, hostname string){
+func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, hostname string, bflags attrVal){
     sd := objectDefs.serviceDefs
     st := objectDefs.serviceTempDefs
     ht := objectDefs.hostTempDefs
     svcEnabledDisabled := Union(&svc.enabled, &svc.disabled)
     tmplEnabledDisabled := svc.tmpl.enabledDisabled
-    deleteServiceTemplate(&sd, &st, &ht, svc, tmplEnabledDisabled, hgrpDeleted, hostname)
+    deleteServiceTemplate(&sd, &st, &ht, svc, tmplEnabledDisabled, hgrpDeleted, hostname, bflags)
     unregisterTemplate := attrVal{"0"}
     for v := range svcEnabledDisabled.m{
         if sd[v].attrExist("host_name"){
-            sd[v]["host_name"].deleteAttrVal(&sd , &ht, v, "SVC HOSTNAME", hostname, hostname)
+            sd[v]["host_name"].deleteAttrVal(&sd , &ht, v, "SVC HOSTNAME", hostname, hostname, bflags)
             if len(*sd[v]["host_name"]) == 0 {
-                printDeletion(v, "SVC HOSTNAME", "host_name", "", "attr")
+                printDeletion(v, "SVC HOSTNAME", "host_name", "", "attr", bflags)
                 delete(sd[v], "host_name")
             }
         }
         if sd[v].attrExist("hostgroup_name"){
-            sd[v]["hostgroup_name"].deleteAttrVal(&sd , &ht, v, "SVC HOSTGROUP_NAME", "hostgroup_name", hostname, hgrpDeleted...)
+            sd[v]["hostgroup_name"].deleteAttrVal(&sd , &ht, v, "SVC HOSTGROUP_NAME", "hostgroup_name", hostname, bflags, hgrpDeleted...)
             if len(*sd[v]["hostgroup_name"]) == 0 {
-                printDeletion(v, "SVC HOSTGROUP_NAME", "hostgroup_name", "", "attr")
+                printDeletion(v, "SVC HOSTGROUP_NAME", "hostgroup_name", "", "attr", bflags)
                 delete(sd[v], "hostgroup_name")
             }
         }
         if !sd[v].attrExist("host_name") && !sd[v].attrExist("hostgroup_name"){                                    // delete hostgroup obj definition
             if sd[v].attrExist("use") {
-                sd[v]["use"].deleteAttrVal(&sd, &ht, v, "SVC USE", "use", hostname, svc.tmpl.deleted...)
+                sd[v]["use"].deleteAttrVal(&sd, &ht, v, "SVC USE", "use", hostname, bflags, svc.tmpl.deleted...)
                 if len(*sd[v]["use"]) == 0 {
                     if !sd[v].attrExist("register") || sd[v]["register"].ToString() == "1" {
                         if sd[v].attrExist("name") && isTemplateBeingUsed(&sd, &st, sd[v]["name"].ToString()){
                             sd[v]["register"] = &unregisterTemplate
                         }else{
-                            printDeletion(v, "SVC USE", "use", "", "attr")
+                            printDeletion(v, "SVC USE", "use", "", "attr", bflags)
                             delete(sd[v], "use")
-                            printDeletion(v, "SVC", "", "", "def")
+                            printDeletion(v, "SVC", "", "", "def", bflags)
                             svc.deleted.Add(v)
                             delete(sd, v)
                         }
                     }else {
                         if !sd[v].attrExist("name") || (sd[v].attrExist("name") && !isTemplateBeingUsed(&sd, &st,sd[v]["name"].ToString())){
-                            printDeletion(v, "SVC", "","", "def")
+                            printDeletion(v, "SVC", "","", "def", bflags)
                             svc.deleted.Add(v)
                             delete(sd, v)
                         }
@@ -490,13 +488,13 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
                         if sd[v].attrExist("name") && isTemplateBeingUsed(&sd, &st, sd[v]["name"].ToString()){
                             sd[v]["register"] = &unregisterTemplate
                         }else{
-                            printDeletion(v, "SVC", "", "", "def")
+                            printDeletion(v, "SVC", "", "", "def", bflags)
                             svc.deleted.Add(v)
                             delete(sd, v)
                         }
                     } else if isSafeDeleteTemplate(&st, *sd[v]["use"], hgrpDeleted, hostname){
                         if !sd[v].attrExist("name") || (sd[v].attrExist("name") && !isTemplateBeingUsed(&sd, &st, v)){
-                            printDeletion(v, "SVC", "","", "def")
+                            printDeletion(v, "SVC", "","", "def", bflags)
                             svc.deleted.Add(v)
                             delete(sd, v)
                         }
@@ -507,13 +505,13 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
                     if sd[v].attrExist("name") && isTemplateBeingUsed(&sd, &st, sd[v]["name"].ToString()){
                         sd[v]["register"] = &unregisterTemplate
                     }else{
-                        printDeletion(v, "SVC", "", "", "def")
+                        printDeletion(v, "SVC", "", "", "def", bflags)
                         svc.deleted.Add(v)
                         delete(sd, v)
                     }
                 }else {
                     if !sd[v].attrExist("name") || (sd[v].attrExist("name") && !isTemplateBeingUsed(&sd, &st,sd[v]["name"].ToString())){
-                        printDeletion(v, "SVC", "","", "def")
+                        printDeletion(v, "SVC", "","", "def", bflags)
                         svc.deleted.Add(v)
                         delete(sd, v)
                     }
@@ -524,19 +522,19 @@ func deleteService(objectDefs *obj, svc *serviceOffset,  hgrpDeleted attrVal, ho
 }
 
 // delete service inheritance via templates
-func deleteServiceTemplate(sd *defs, st *defs, ht *defs, svc *serviceOffset, tmplEnabledDisabled attrVal, hgrpDeleted attrVal, hostname string){
+func deleteServiceTemplate(sd *defs, st *defs, ht *defs, svc *serviceOffset, tmplEnabledDisabled attrVal, hgrpDeleted attrVal, hostname string, bflags attrVal){
     for _, t := range tmplEnabledDisabled {
         if (*st)[t].attrExist("host_name"){
-            (*st)[t]["host_name"].deleteAttrVal(st , ht, t, "SVCTMPL HOSTNAME", "host_name", hostname, hostname)
+            (*st)[t]["host_name"].deleteAttrVal(st , ht, t, "SVCTMPL HOSTNAME", "host_name", hostname, bflags, hostname)
             if len(*(*st)[t]["host_name"]) == 0 {
-                printDeletion(t, "SVCTMPL HOSTNAME", "host_name", "", "attr")
+                printDeletion(t, "SVCTMPL HOSTNAME", "host_name", "", "attr", bflags)
                 delete((*st)[t], "host_name")
             }
         }
         if (*st)[t].attrExist("hostgroup_name"){
-            (*st)[t]["hostgroup_name"].deleteAttrVal(st , ht, t, "SVCTMPL HOSTGROUP_NAME", "hostgroup_name", hostname, hgrpDeleted...)
+            (*st)[t]["hostgroup_name"].deleteAttrVal(st , ht, t, "SVCTMPL HOSTGROUP_NAME", "hostgroup_name", hostname,bflags,  hgrpDeleted...)
             if len(*(*st)[t]["hostgroup_name"]) == 0 {
-                printDeletion(t, "SVCTMPL HOSTGROUP_NAME", "hostgroup_name", "", "attr")
+                printDeletion(t, "SVCTMPL HOSTGROUP_NAME", "hostgroup_name", "", "attr", bflags)
                 delete((*st)[t], "hostgroup_name")
             }
         }
@@ -544,7 +542,7 @@ func deleteServiceTemplate(sd *defs, st *defs, ht *defs, svc *serviceOffset, tmp
             if !(*st)[t].attrExist("register") || (*st)[t]["register"].ToString() == "1" {
                 if (*st)[t].attrExist("use") && !isTemplateBeingUsed(sd, st, t){
                     if isSafeDeleteTemplate(st, *(*st)[t]["use"], hgrpDeleted, hostname) {
-                        printDeletion(t, "SVCTMPL", "", "", "def")
+                        printDeletion(t, "SVCTMPL", "", "", "def", bflags)
                         svc.tmpl.deleted.Add(t)
                         delete(*st, t)
                     }
@@ -553,7 +551,7 @@ func deleteServiceTemplate(sd *defs, st *defs, ht *defs, svc *serviceOffset, tmp
                     (*st)[t]["register"] = &unregisterTemplate
                     fmt.Printf("%vRegister%v:%v[SVCTMPL EDIT]%v: Unregister service template %v\n", Yellow, RST, Blue, RST, t)
                 } else {
-                    printDeletion(t, "SVCTMPL", "", "", "def")
+                    printDeletion(t, "SVCTMPL", "", "", "def", bflags)
                     svc.tmpl.deleted.Add(t)
                     delete(*st, t)
                 }
@@ -657,53 +655,44 @@ func isSafeDeleteHostgroup(d *defs, t *defs, hostgroupName string) bool {
 }
 
 // helper function to print hostgroup deletion
-func printDeletion(id string, codeName string, attrName string, attrVal string, delType string, flags... string){
+func printDeletion(id string, codeName string, attrName string, attrVal string, delType string, bflags attrVal){
     switch delType {
     // print deleted object definition, attribute and value
     case "val":
-        if len(flags) != 0 {
-            if ToFlag(&flags).HasAll("color") {
-                fmt.Printf("%vRemove%v:%v[%v]%v: Removed %v from %v\n",Red, RST, Blue, codeName, RST, attrVal, id)
-            }
-
+        if bflags.Has("color"){
+            fmt.Printf("%vRemove%v:%v[%v]%v: removed %v from %v\n",Red, RST, Blue, codeName, RST, attrVal, id)
         }else {
             fmt.Printf("Remove:[%v]: removed %v from %v\n", codeName, attrVal,id)
         }
     // print deleted object attribute
     case "attr":
-        if len(flags) != 0 {
-            if ToFlag(&flags).HasAll("color") {
-                fmt.Printf("%vDelete%v:%v[%v]%v: Deleted %v attribute from %v\n",Red, RST, Blue, codeName, RST, attrName, id)
-            }
-
+        if bflags.Has("color"){
+            fmt.Printf("%vDelete%v:%v[%v]%v: deleted %v attribute from %v\n",Red, RST, Blue, codeName, RST, attrName, id)
         }else {
             fmt.Printf("Delete:[%v]: deleted %v attribute from %v\n",codeName, attrName, id)
         }
     // print deleted object definition
     case "def":
-        if len(flags) != 0 {
-            if ToFlag(&flags).HasAll("color") {
-                fmt.Printf("%vDelete%v:%v[%v DEFINITION]%v: Deleted object definition %v\n",Red, RST, Blue, codeName, RST, id)
-            }
-
+        if bflags.Has("color"){
+            fmt.Printf("%vDelete%v:%v[%v DEFINITION]%v: deleted object definition %v\n",Red, RST, Blue, codeName, RST, id)
         }else {
-            fmt.Printf("Delete:[%v]: deleted object definition %v%v%v\n", attrName, Italic, id, RST)
+            fmt.Printf("Delete:[%v DEFINITION]: deleted object definition %v\n", codeName, id)
         }
 
     }
 }
 
 // Handle attribute value deletion
-func (a *attrVal) deleteAttrVal(hd *defs, td *defs, id string, codeName string, attrName string, hostname string, attrVals ...string) {
+func (a *attrVal) deleteAttrVal(hd *defs, td *defs, id string, codeName string, attrName string, hostname string, bflags attrVal, attrVals ...string) {
     idx := (*a).FindItemIndex(attrVals...)
     for _, i := range *idx {
         if strings.HasPrefix((*a)[i], "^"){
             if isSafeDeleteRegex(hd, td, (*a)[i], id, hostname){
-                printDeletion(id, codeName, attrName, (*a)[i], "val")
+                printDeletion(id, codeName, attrName, (*a)[i], "val", bflags)
                 RemoveItemByIndex(a, i)
             }
         }else{
-            printDeletion(id, codeName, attrName, (*a)[i], "val")
+            printDeletion(id, codeName, attrName, (*a)[i], "val", bflags)
             RemoveItemByIndex(a, i)
 
         }
@@ -711,22 +700,22 @@ func (a *attrVal) deleteAttrVal(hd *defs, td *defs, id string, codeName string, 
 }
 
 // delete hostgroup association
-func deleteHostgroup(objectDefs *obj, hg *hostgroupOffset, hostname string){
+func deleteHostgroup(objectDefs *obj, hg *hostgroupOffset, hostname string, bflags attrVal){
     hgd := objectDefs.hostgroupDefs
     hd := objectDefs.hostDefs
     td := objectDefs.hostTempDefs
     for _, v := range hg.enabledDisabled {
         if hgd[v].attrExist("members") {
-            hgd[v]["members"].deleteAttrVal(&hd, &td, v, "HGRP MEMBERS", "members", hostname, hostname)
+            hgd[v]["members"].deleteAttrVal(&hd, &td, v, "HGRP MEMBERS", "members", hostname, bflags, hostname)
             if len(*hgd[v]["members"]) == 0 {
-                printDeletion(v, "HGRP MEMBERS", "members", "members", "attr")
+                printDeletion(v, "HGRP MEMBERS", "members", "members", "attr", bflags)
                 delete((hgd)[v], "members" )
                 if !hgd[v].attrExist("hostgroup_members") {
-                    printDeletion(v,"HGRP", "", "", "def")
+                    printDeletion(v,"HGRP", "", "", "def", bflags)
                     hg.deleted.Add(v)
                     delete(hgd, v)
                     //recursive deletion for hostgroups inherited from this hostgroup
-                    deleteHostgroupMembership(&hgd,&td, hg, v, hostname)
+                    deleteHostgroupMembership(&hgd,&td, hg, v, hostname, bflags)
                 }
             }
         }
@@ -734,19 +723,19 @@ func deleteHostgroup(objectDefs *obj, hg *hostgroupOffset, hostname string){
 }
 
 // deleted inhereted hostgroup
-func deleteHostgroupMembership(hgd *defs, td *defs, hgrp *hostgroupOffset, hgrpName string, hostname string) {
+func deleteHostgroupMembership(hgd *defs, td *defs, hgrp *hostgroupOffset, hgrpName string, hostname string, bflags attrVal) {
     for _, v := range hgrp.enabledDisabled{
         if (*hgd)[v].attrExist("hostgroup_members") {
-            (*hgd)[v]["hostgroup_members"].deleteAttrVal(hgd, td, v, "hostgroup_members", hostname, hgrpName)
+            (*hgd)[v]["hostgroup_members"].deleteAttrVal(hgd, td, v, "hostgroup_members", hostname, hgrpName, bflags)
             if len(*(*hgd)[v]["hostgroup_members"]) == 0 {
-                printDeletion(v, "HGRP HOSTGROUP_MEMBERS", "hostgroup_members", "", "attr")
+                printDeletion(v, "HGRP HOSTGROUP_MEMBERS", "hostgroup_members", "", "attr", bflags)
                 delete((*hgd)[v], "hostgroup_members")
                 if !(*hgd)[v].attrExist("members"){
-                    printDeletion(v,"HGRP", "", "", "def")
+                    printDeletion(v,"HGRP", "", "", "def", bflags)
                     hgrp.deleted.Add(v)
                     delete(*hgd, v)
                     //recursive deletion for hostgroups inherited from this hostgroup
-                    deleteHostgroupMembership(hgd, td, hgrp, v, hostname)
+                    deleteHostgroupMembership(hgd, td, hgrp, v, hostname, bflags)
                 }
             }
         }
@@ -754,7 +743,7 @@ func deleteHostgroupMembership(hgd *defs, td *defs, hgrp *hostgroupOffset, hgrpN
 }
 
 // write chagnes to a file
-func WriteFile(d *defs, fileName string, objName string, flags... string) {
+func WriteFile(d *defs, fileName string, objName string, bflags attrVal) {
     objType, attrLen := getMaxAttr(objName)
     f, err := os.Create(fileName); if err != nil {
         fmt.Println(err)
@@ -765,75 +754,15 @@ func WriteFile(d *defs, fileName string, objName string, flags... string) {
         err := f.Close(); if err != nil {
             fmt.Println("Failed to close file ", err)
         }
-        if len(flags) != 0 && ToFlag(&flags).HasAll("color") {
-            fmt.Printf("%vWrite%v: Created a new file with the changes applied '%v'\n",Green,RST,fileName)
+        if bflags.Has("color"){
+            fmt.Printf("%vWrite%v: created a new config file '%v'\n",Green,RST,fileName)
         }else {
-            fmt.Printf("Write: Created a new file with the changes applied '%v'\n",fileName)
+            fmt.Printf("Write: created a new config file '%v'\n",fileName)
         }
     }()
-    // write defs to a file
+    // write nagios objects to a file
     for _, def := range *d {
         formatDef := formatObjDef(def, objType, attrLen)
         f.WriteString(formatDef)
     }
 }
-
-//func main() {
-//    flags =  append(flags, "color")
-////    path := "/home/afathi/nagios-configs"
-//    path := "/home/afathi/work/nagios-configs"
-////    path := "test/"
-////    hostname := "sdk-jenkins.sea.bigfishgames.com"
-////    hostname := "java03-mongo-db05.sea.bigfishgames.com"
-////    hostname := "sdk-jenkins.sea.bigfishgames.com"
-////    hostname := "host3.bigfishgames.com"
-////    hostname := "casino-game210.sea.bigfishgames.com"
-//    hostname := "casino-elasticsearch04.sea.bigfishgames.com"
-////    hostname := "f2p.bigfishgames.com"
-////    hostname := "adash01.bigfish.lan"
-//    excludedDir := []string {".git", "libexec", "timeperiods.cfg", "servicegroups.cfg"}
-//    configFiles := findConfFiles(path, ".cfg", excludedDir)
-//    data, err := readConfFile(configFiles)
-//    if err != nil {
-//        panic(fmt.Sprintf("%v", err))
-//    }
-//    objDefs,err := getObjDefs(data); if err != nil {
-//        fmt.Println(err, path)
-//        os.Exit(1)
-//    }
-//    // search for the host
-//    host :=  findHost(&objDefs.hostDefs, &objDefs.hostTempDefs, hostname)
-//    if host.GetHostName() == "" {
-//        fmt.Println("Warning: host does not exist")
-//        os.Exit(1)
-//    }
-//    // find hostgroup association
-//    hostgroups := findHostGroups(&objDefs.hostgroupDefs, &objDefs.hostTempDefs, host)
-//    // find service association
-//    services := findServices(&objDefs.serviceDefs, &objDefs.serviceTempDefs, hostgroups, host.GetHostName())
-//    if services.GetEnabledServiceName() == nil {
-//        services.svcEnabledName = append(services.svcEnabledName, "Not Found")
-//        fmt.Println(hostgroups)
-//    }
-//    deleteHost(&objDefs.hostDefs, &objDefs.hostTempDefs, &host)
-//    fmt.Println("------------------------")
-//    deleteHostgroup(objDefs, &hostgroups, host.hostName)
-//    fmt.Println("------------------------")
-//    deleteService(objDefs, &services, hostgroups.hgrpDeleted, host.hostName)
-////    fmt.Println(*services.GetEnabledDisabledServiceName())
-////    objDefs.serviceDefs.printDef("service", services.svcEnabledName...)
-////      fmt.Println(len(services.svcEnabled))
-////    WriteFile(&objDefs.hostDefs, "myhost.cfg", "host", "color")
-////    objDefs.hostDefs.printObjDef("host")
-//
-//
-//    printHostInfo(host.GetHostName(), hostgroups, services)
-////    arr := strSlice{"a", "b", "c", "d"}
-////    fmt.Println(arr)
-////    arr.RemoveByVal("c")
-////    fmt.Println(arr)
-////    objDefs.hostTempDefs.printObjDef("host")
-////    objDefs.hostgroupDefs.printObjDef("hostgroup")
-////    objDefs.serviceTempDefs.printObjDef("service")
-////    objDefs.contactTempDefs.printObjDef("service")
-//}
