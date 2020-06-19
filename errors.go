@@ -52,7 +52,7 @@ func (e *NotFoundError) Error() string {
     if e.errType == "Warn" {
         return fmt.Sprintf("NotFound: %vWarn%v: %v '%v'",Yellow, RST, e.err, e.value)
     } else {
-        return fmt.Sprintf("NotFound: %v%v%v: '%v'",Red,e.errType, RST, e.err, e.value)
+        return fmt.Sprintf("NotFound: %v%v%v: '%v'",Red,RST, e.err, e.value)
     }
 }
 
