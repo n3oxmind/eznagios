@@ -208,77 +208,9 @@ func (o *obj) SetHostDependencyDefs(hostdependencyDef def, idx int) {
     o.hostdependencyDefs[string(idx)] = hostdependencyDef
 }
 
-// TODO:obj dependency does not have a unique ID need to hcange the data surct to []defs
 func (o *obj) SetServiceDependencyDefs(servicedependencyDef def, idx int) {
     o.servicedependencyDefs[string(idx)] = servicedependencyDef
 }
-
-// hostgroupOffset Getters
-//func (o *hostgroupOffset) GetMembersOffset() offset {
-//    return o.members
-//}
-//
-//func (o *hostgroupOffset) GetMembersExclOffset() offset {
-//    return o.membersExcl
-//}
-//
-//func (o *hostgroupOffset) GetHostgroupMembersOffset() offset {
-//    return o.hostgroupMembers
-//}
-//
-//func (o *hostgroupOffset) GetHostgroupMembersExclOffset() offset {
-//    return o.hostgroupMembersExcl
-//}
-
-//func (o *hostgroupOffset) GetEnabledHostgroup() *attrVal {
-//    return o.hgrpEnabled
-//}
-//
-//func (o *hostgroupOffset) GetDisabledHostgroup() *attrVal {
-//    return o.hgrpDisabled
-//}
-//
-//func (o *hostgroupOffset) GetEnabledHostgroupName() attrVal {
-//    return o.hgrpEnabledName
-//}
-//
-//func (o *hostgroupOffset) GetDisabledHostgroupName() attrVal {
-//    return o.hgrpDisabledName
-//}
-//func (o *hostgroupOffset) GetTemplateHostgroupsOffset() offset {
-//    return o.templateHostgroups
-//}
-//// hostgroupOffset Setters
-//func (o *hostgroupOffset) SetMembersOffset(id string, member string) {
-//    o.members[id] = append(o.members[id], member)
-//}
-//
-//func (o *hostgroupOffset) SetMembersExclOffset(id string, member string) {
-//    o.membersExcl[id] = append(o.membersExcl[id], member)
-//}
-//
-//func (o *hostgroupOffset) SetHostgroupMembersOffset(id string, member string) {
-//    o.hostgroupMembers[id] = append(o.hostgroupMembers[id], member)
-//}
-//
-//func (o *hostgroupOffset) SetHostgroupMembersExclOffset(id string, member string) {
-//    o.hostgroupMembersExcl[id] = append(o.hostgroupMembersExcl[id], member)
-//}
-//
-//func (o *hostgroupOffset) SetTemplateHostgroupsOffset(id string, hostgroup string) {
-//    o.templateHostgroups[id] = append(o.templateHostgroups[id], hostgroup)
-//}
-
-//func (o *hostgroupOffset) SetDeletedHostgroup(hostgroup string) {
-//    o.hgrpDeleted = append(o.hgrpDeleted, hostgroup)
-//}
-//func (o *hostgroupOffset) GetEnabledDisabledHostgroup() attrVal {
-//    return o.hgrpEnabledDisabledName
-//}
-//
-//func (o *hostgroupOffset) GetDeletedHostgroup() attrVal {
-//    return o.hgrpDeleted
-//}
 
 func (o *hostgroupOffset) SetEnabledDisabledHostgroups() {
     hgrpEnabled := Union(&o.members, &o.hostgroupMembers)
@@ -302,11 +234,6 @@ func (o *hostgroupOffset) SetEnabledDisabledHostgroups() {
     }
 
 }
-
-//func (o *hostgroupOffset) SetEnabledDisabledHostgroup() {
-//    o.hgrpEnabledDisabledName = append(o.hgrpEnabledDisabledName, o.hgrpEnabledName...)
-//    o.hgrpEnabledDisabledName = append(o.hgrpEnabledDisabledName, o.hgrpDisabledName...)
-//}
 
 func (o *hostOffset) SetEnabledHostgroups(hg *hostgroupOffset) {
     for _, v := range o.GetEnabledHostgroupsName(){
@@ -336,14 +263,6 @@ func (s *serviceOffset) Add(attr string, id string, val string) {
 
 
 }
-
-//func (o *serviceOffset) SetHybridService(svc string) {
-//    o.others = append(o.others, svc)
-//}
-
-//func (o *serviceOffset) SetDeletedService(svc string) {
-//    o.svcDeleted = append(o.svcDeleted, svc)
-//}
 
 func (o *serviceOffset) SetEnabledServiceTemplate() {
     enabledTemplate := attrVal{}
