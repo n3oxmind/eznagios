@@ -17,11 +17,15 @@ This was suppose to have a GUI and hope someone will take this and continue this
 
 ### Usage Examples
 #### Search
+```shell
 $ eznagios search -h java26-game01.sea.bigfishgames.com -pretty
 $ eznagios search -h mts-.* 
+```
 
 #### Delete 
+```shell
 $ eznagios delete -h mts-.* --verbose
+```
 
 
 Note:
