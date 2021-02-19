@@ -1,7 +1,0 @@
-print-inf01-p.bigfish.lan
-accounts01.sea.bigfishgames.com
-
-docker-ucp03.sea.bigfishgames.com
-
-
-host1.bigfishgames.org

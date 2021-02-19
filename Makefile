@@ -1,18 +1,18 @@
 PREFIX = /usr/local/bin
 
-all: gonag
+all: eznagios
 
-gonag:
-	@go build -o gonag main.go formatter.go objtype.go attributes.go collection.go colors.go errors.go parser.go
-	@echo "Successfully built gonag"
+eznagios:
+	@go build -o eznagios main.go formatter.go objtype.go attributes.go collection.go colors.go errors.go parser.go
+	@echo "Successfully built eznagios"
 
 
 run:
-	go run gonag
+	go run eznagios
 
-install: gonag
-	@mv gonag $(PREFIX)/gonag
-	@echo "Installed gonag to $(PREFIX)/gonag"
+install: eznagios
+	@mv eznagios $(PREFIX)/eznagios
+	@echo "Installed eznagios to $(PREFIX)/eznagios"
 
 clean:
-	@rm -f gonag
+	@rm -f eznagios

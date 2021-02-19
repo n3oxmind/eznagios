@@ -603,7 +603,7 @@ func parseRegex (s []string, d *defs) ([]string, []string, []string){
 // parse and load nagios config data to memory
 func loadNagiosData(cfg interface{}, fileExt string, excludedDirs []string) *obj {
     // perform serach
-    configFiles := findConfFiles(cfg.(string), ".cfg", excludedDirs)
+    configFiles := findConfFiles(cfg.([]string)[0], ".cfg", excludedDirs)
     rawData, err := readConfFile(configFiles)
     if err != nil {
         panic(fmt.Sprintf("%v", err))
