@@ -34,6 +34,4 @@ $ eznagios delete -h part_of_hostname-.* --verbose
 
 Note:
 
-- This is still under development. search and delete are function just fine will add the rest of the feature mentioned above on my free time.
-
-- You can upgrade this or added more functionality to it.
+- This tool is still under development. search and delete are function just fine. I will add the rest of the features mentioned above on my free time.
