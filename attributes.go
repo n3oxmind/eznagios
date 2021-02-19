@@ -1,4 +1,4 @@
-/*Nagios standard objects directives and BFG custom directives.
+/*Nagios standard objects directives and custom directives.
 Any new custom directives/variables need to be added here otherwise eznagios will flag it as unknown*/
 // Standard attributes for Nagios host object
 package main
