@@ -1,4 +1,4 @@
-# WORK STILL IN DEVELOPMENT
+# PROJECT IS UNDER DEVELOPMENT 
 
 eznagios is a Go tool to manage and automate nagios config files. Unfrotunatley, the tool is half completed but fully functional. 
 I was able to reversed engineer the way nagios function and make it possible to write application that will automate the config and make it more user friendly.
